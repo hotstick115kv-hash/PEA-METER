@@ -629,11 +629,11 @@ tr:hover td { background: var(--gray-50); }
     <!-- Recent records -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title">บันทึกล่าสุดของฉัน</span>
+        <span class="card-title" id="my-records-title">บันทึกล่าสุดของฉัน</span>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>วันที่</th><th>PEA NO.</th><th>kWh</th><th>สถานะ</th><th>รูป</th></tr></thead>
+          <thead><tr id="my-records-head"><th>วันที่</th><th>PEA NO.</th><th>kWh</th><th>สถานะ</th><th>รูป</th></tr></thead>
           <tbody id="my-records-body"></tbody>
         </table>
       </div>
@@ -707,7 +707,7 @@ tr:hover td { background: var(--gray-50); }
             <tr>
               <th>วันที่</th><th>PEA NO.</th><th>จุดติดตั้ง</th>
               <th>kWh เดือนนี้</th><th>kWh เดือนก่อน</th><th>ผลต่าง</th><th>±%</th>
-              <th>ผู้บันทึก</th><th>สถานะ</th>
+              <th>ผู้บันทึก</th><th>จัดการ</th>
             </tr>
           </thead>
           <tbody id="monthly-body"></tbody>
@@ -799,6 +799,61 @@ tr:hover td { background: var(--gray-50); }
           <tbody id="users-body"></tbody>
         </table>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT RECORD MODAL -->
+<div class="modal-overlay" id="edit-record-modal" onclick="this.classList.remove('open')">
+  <div class="modal" onclick="event.stopPropagation()" style="border-radius:16px;max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title">แก้ไขบันทึกหน่วย</span>
+      <button class="modal-close" onclick="document.getElementById('edit-record-modal').classList.remove('open')">✕</button>
+    </div>
+    <input type="hidden" id="edit-rec-id">
+
+    <div style="background:var(--primary-light);padding:10px 14px;border-radius:var(--radius);font-size:13px;color:var(--primary-dark);margin-bottom:1rem" id="edit-rec-meta"></div>
+
+    <div class="form-group">
+      <label class="form-label">กิโลวัตต์-ชั่วโมง รวม Reset ครั้งสุดท้าย *</label>
+      <input type="number" id="edit-rec-kwh" class="form-control" step="0.01">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">วัน-เดือน-ปี Reset ครั้งสุดท้าย</label>
+      <input type="date" id="edit-rec-reset-date" class="form-control">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">พิกัด GPS</label>
+      <div class="gps-field">
+        <div class="gps-display" id="edit-gps-display">-</div>
+        <button class="btn btn-outline" onclick="getGPSForEdit()" id="edit-gps-btn">📍 รับพิกัดใหม่</button>
+      </div>
+      <input type="hidden" id="edit-rec-lat">
+      <input type="hidden" id="edit-rec-lng">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">รูปถ่ายมิเตอร์</label>
+      <div class="photo-upload" onclick="document.getElementById('edit-rec-photo').click()">
+        <input type="file" id="edit-rec-photo" accept="image/*" capture="environment" style="display:none" onchange="previewEditPhoto(this)">
+        <div id="edit-photo-placeholder">
+          <div class="photo-upload-icon">📷</div>
+          <p style="font-size:14px;color:var(--gray-600)">แตะเพื่อเปลี่ยนรูป (ไม่บังคับ)</p>
+        </div>
+        <img id="edit-photo-preview" class="photo-preview">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">หมายเหตุ</label>
+      <textarea id="edit-rec-note" class="form-control" rows="2"></textarea>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="document.getElementById('edit-record-modal').classList.remove('open')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="saveEditRecord()" id="edit-save-btn">💾 บันทึกการแก้ไข</button>
     </div>
   </div>
 </div>
@@ -919,7 +974,7 @@ tr:hover td { background: var(--gray-50); }
 
 const CONFIG = {
   // วาง URL ที่ได้จากการ Deploy Apps Script (ลงท้ายด้วย /exec)
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzRDjCUpAgCqQBKeeW12WYggROKTTH_51ojG4cQsPlmVo7A0DMj5DbDNo7hOzno5jfJ/exec',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbx1SUl9_b2xAkCJ6p0RvyuiBnEA48a8SZx7kfkgjgAA43Mg3npOelJub0Xj45DUb1iD/exec',
   ANOMALY_THRESHOLD: 10,
   TOKEN_STORAGE_KEY: 'pea_token',
   USER_STORAGE_KEY: 'pea_user',
@@ -1506,31 +1561,172 @@ function resetRecordForm() {
 }
 
 function renderMyRecords() {
-  const myRecs = readings.filter(r => String(r.empId) === String(currentUser.empId)).slice(0, 20);
+  const isAdmin = currentUser.role === 'admin';
+  const recs = isAdmin
+    ? [...readings].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 30)
+    : readings.filter(r => String(r.empId) === String(currentUser.empId)).slice(0, 20);
+
+  document.getElementById('my-records-title').textContent = isAdmin ? 'บันทึกล่าสุด (ทั้งหมด)' : 'บันทึกล่าสุดของฉัน';
+  document.getElementById('my-records-head').innerHTML = isAdmin
+    ? '<th>วันที่</th><th>PEA NO.</th><th>kWh</th><th>ผู้บันทึก</th><th>สถานะ</th><th>จัดการ</th>'
+    : '<th>วันที่</th><th>PEA NO.</th><th>kWh</th><th>สถานะ</th><th>จัดการ</th>';
+
   const tbody = document.getElementById('my-records-body');
-  if (myRecs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:2rem">ยังไม่มีการบันทึก</td></tr>';
+  if (recs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${isAdmin ? 6 : 5}" style="text-align:center;color:var(--gray-400);padding:2rem">ยังไม่มีการบันทึก</td></tr>`;
     return;
   }
-  tbody.innerHTML = myRecs.map(r => `
-    <tr>
-      <td>${fmtDate(r.date)}</td>
-      <td><b>${r.peaNo}</b></td>
-      <td>${fmtNum(r.kwh)}</td>
-      <td>${(() => {
-        const prev = getPrevReading(r.peaNo, r.year, r.month);
-        const d = calcDiff(r.kwh, prev);
-        return d ? anomalyBadge(d.pct) : '<span class="badge badge-gray">-</span>';
-      })()}</td>
-      <td style="display:flex;gap:6px">
-        ${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : ''}
-        ${canEdit(r) ? `<button class="btn btn-sm btn-outline" onclick="deleteRecord('${r.id}')">🗑️</button>` : ''}
-      </td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = recs.map(r => {
+    const statusBadge = (() => {
+      const prev = getPrevReading(r.peaNo, r.year, r.month);
+      const d = calcDiff(r.kwh, prev);
+      return d ? anomalyBadge(d.pct) : '<span class="badge badge-gray">-</span>';
+    })();
+    const actions = `
+      ${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : ''}
+      ${canEdit(r) ? `<button class="btn btn-sm btn-outline" onclick="openEditRecord('${r.id}')">✏️</button>` : ''}
+      ${canEdit(r) ? `<button class="btn btn-sm btn-outline" onclick="deleteRecord('${r.id}')">🗑️</button>` : ''}
+    `;
+    return isAdmin ? `
+      <tr>
+        <td>${fmtDate(r.date)}</td>
+        <td><b>${r.peaNo}</b></td>
+        <td>${fmtNum(r.kwh)}</td>
+        <td style="font-size:12px">${r.name || '-'}</td>
+        <td>${statusBadge}</td>
+        <td style="display:flex;gap:6px">${actions}</td>
+      </tr>` : `
+      <tr>
+        <td>${fmtDate(r.date)}</td>
+        <td><b>${r.peaNo}</b></td>
+        <td>${fmtNum(r.kwh)}</td>
+        <td>${statusBadge}</td>
+        <td style="display:flex;gap:6px">${actions}</td>
+      </tr>`;
+  }).join('');
+}
+
+function openEditRecord(id) {
+  const r = readings.find(x => x.id === id);
+  if (!r) return;
+  if (!canEdit(r)) { alert('คุณไม่มีสิทธิ์แก้ไขรายการนี้'); return; }
+
+  const m = getMeter(r.peaNo);
+  document.getElementById('edit-rec-id').value = r.id;
+  document.getElementById('edit-rec-meta').innerHTML =
+    `📅 ${fmtDate(r.date)} | ⚡ ${r.peaNo}${m ? ' — ' + m.location : ''} | 👤 ${r.name || '-'}`;
+  document.getElementById('edit-rec-kwh').value = r.kwh;
+  document.getElementById('edit-rec-reset-date').value = r.resetDate ? String(r.resetDate).slice(0, 10) : '';
+  document.getElementById('edit-rec-note').value = r.note || '';
+  document.getElementById('edit-rec-lat').value = r.lat || '';
+  document.getElementById('edit-rec-lng').value = r.lng || '';
+  document.getElementById('edit-gps-display').textContent = (r.lat && r.lng) ? `${r.lat}, ${r.lng}` : 'ไม่มีพิกัด';
+  document.getElementById('edit-gps-btn').textContent = '📍 รับพิกัดใหม่';
+  document.getElementById('edit-gps-btn').disabled = false;
+
+  // photo preview reset
+  document.getElementById('edit-rec-photo').value = '';
+  const preview = document.getElementById('edit-photo-preview');
+  if (r.photoUrl) {
+    preview.src = r.photoUrl;
+    preview.style.display = 'block';
+    document.getElementById('edit-photo-placeholder').style.display = 'none';
+  } else {
+    preview.style.display = 'none';
+    document.getElementById('edit-photo-placeholder').style.display = 'block';
+  }
+
+  document.getElementById('edit-record-modal').classList.add('open');
+}
+
+function getGPSForEdit() {
+  const btn = document.getElementById('edit-gps-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ กำลังรับ...';
+  if (!navigator.geolocation) {
+    document.getElementById('edit-gps-display').textContent = 'เบราว์เซอร์ไม่รองรับ GPS';
+    btn.disabled = false; btn.textContent = '📍 ลองใหม่';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const { latitude: lat, longitude: lng } = pos.coords;
+    document.getElementById('edit-gps-display').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    document.getElementById('edit-rec-lat').value = lat.toFixed(6);
+    document.getElementById('edit-rec-lng').value = lng.toFixed(6);
+    btn.disabled = false; btn.textContent = '📍 รับพิกัดใหม่';
+  }, () => {
+    document.getElementById('edit-gps-display').textContent = 'ไม่สามารถรับพิกัดได้';
+    btn.disabled = false; btn.textContent = '📍 ลองใหม่';
+  }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+function previewEditPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = document.getElementById('edit-photo-preview');
+    img.src = e.target.result;
+    img.style.display = 'block';
+    document.getElementById('edit-photo-placeholder').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveEditRecord() {
+  const id = document.getElementById('edit-rec-id').value;
+  const kwh = +document.getElementById('edit-rec-kwh').value;
+  const r = readings.find(x => x.id === id);
+  if (!r) return;
+  if (!canEdit(r)) { alert('คุณไม่มีสิทธิ์แก้ไขรายการนี้'); return; }
+  if (!kwh && kwh !== 0) { alert('กรุณากรอกหน่วย kWh'); return; }
+
+  const btn = document.getElementById('edit-save-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> กำลังบันทึก...';
+
+  try {
+    let photoBase64 = '';
+    let photoMimeType = '';
+    const photoInput = document.getElementById('edit-rec-photo');
+
+    if (photoInput.files[0]) {
+      btn.innerHTML = '<span class="spinner"></span> กำลังเตรียมรูป...';
+      const compressed = await compressImage(photoInput.files[0], 1280, 0.75);
+      photoMimeType = compressed.mimeType;
+      photoBase64 = compressed.base64;
+      btn.innerHTML = '<span class="spinner"></span> กำลังอัปโหลดรูปขึ้น Drive...';
+    }
+
+    await apiPost('updateReading', {
+      id,
+      kwh,
+      resetDate: document.getElementById('edit-rec-reset-date').value,
+      lat: document.getElementById('edit-rec-lat').value,
+      lng: document.getElementById('edit-rec-lng').value,
+      note: document.getElementById('edit-rec-note').value,
+      photoBase64,
+      photoMimeType,
+    });
+
+    await loadReadings();
+    document.getElementById('edit-record-modal').classList.remove('open');
+    alert('✅ แก้ไขข้อมูลสำเร็จ');
+    renderMyRecords();
+    renderDashboard();
+    if (activeTab === 'monthly') renderMonthly();
+    if (activeTab === 'anomaly') renderAnomalies();
+  } catch (err) {
+    alert('แก้ไขไม่สำเร็จ: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '💾 บันทึกการแก้ไข';
+  }
 }
 
 async function deleteRecord(id) {
+  const r = readings.find(x => x.id === id);
+  if (r && !canEdit(r)) { alert('คุณไม่มีสิทธิ์ลบรายการนี้'); return; }
   if (!confirm('ยืนยันการลบรายการนี้?')) return;
   try {
     await apiPost('deleteReading', { id });
@@ -1702,7 +1898,11 @@ function renderMonthly() {
       <td>${d ? fmtNum(d.diff) : '-'}</td>
       <td>${d ? anomalyBadge(d.pct) : '-'}</td>
       <td style="font-size:12px">${r.name || '-'}</td>
-      <td>${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : '<span style="color:var(--gray-400);font-size:12px">-</span>'}</td>
+      <td style="display:flex;gap:6px">
+        ${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : ''}
+        ${canEdit(r) ? `<button class="btn btn-sm btn-outline" onclick="openEditRecord('${r.id}')">✏️</button>` : ''}
+        ${canEdit(r) ? `<button class="btn btn-sm btn-outline" onclick="deleteRecord('${r.id}')">🗑️</button>` : ''}
+      </td>
     </tr>`;
   }).join('');
 
