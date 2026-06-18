@@ -468,6 +468,8 @@ tr:hover td { background: var(--gray-50); }
       <span class="badge-org" style="background:rgba(255,255,255,0.2);color:white;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">กฟภ.</span>
     </div>
     <div class="topbar-user">
+      <span id="offline-indicator" style="display:none;font-size:11px;background:rgba(255,255,255,0.2);padding:3px 9px;border-radius:20px;font-weight:600">📡 ออฟไลน์</span>
+      <button id="sync-btn" onclick="syncOfflineRecords()" class="btn btn-sm" style="display:none;background:var(--accent);color:white;border:none;padding:6px 12px;font-size:12px;font-weight:700">🔄 ซิงค์ข้อมูล (0)</button>
       <span id="topbar-username" style="font-size:13px;opacity:0.9"></span>
       <div class="user-avatar" id="topbar-avatar">A</div>
       <button onclick="doLogout()" class="btn btn-sm" style="background:rgba(255,255,255,0.15);color:white;border:none;padding:6px 12px;font-size:12px">ออกจากระบบ</button>
@@ -573,6 +575,7 @@ tr:hover td { background: var(--gray-50); }
             <label class="form-label">กิโลวัตต์-ชั่วโมง รวม Reset ครั้งสุดท้าย *</label>
             <input type="number" id="rec-kwh" class="form-control" placeholder="0.00" step="0.01" oninput="checkAnomaly()">
             <div id="rec-anomaly-msg" style="margin-top:6px;font-size:12px"></div>
+            <div id="rec-net-units" style="margin-top:6px;font-size:13px;color:var(--primary-dark)"></div>
           </div>
 
           <div class="form-group" style="grid-column:1/-1">
@@ -595,6 +598,17 @@ tr:hover td { background: var(--gray-50); }
                 <p style="font-size:12px;color:var(--gray-400)">รูปจะถูกบันทึกสำหรับการตรวจสอบ</p>
               </div>
               <img id="photo-preview" class="photo-preview">
+            </div>
+
+            <div id="ocr-section" style="display:none;margin-top:10px">
+              <button type="button" class="btn btn-outline btn-sm" id="ocr-btn" onclick="runOcrOnPhoto()">🔍 อ่านเลขจากรูป (ทดลอง)</button>
+              <div id="ocr-result-box" style="display:none;margin-top:10px;padding:12px;background:var(--gray-50);border-radius:var(--radius);border:1px solid var(--gray-200)">
+                <div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">ผลที่อ่านได้ (ตรวจสอบ/แก้ไขให้ถูกต้องก่อนใช้ — OCR อาจอ่านผิดได้)</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input type="text" id="ocr-result-text" class="form-control" style="flex:1" placeholder="ตัวเลขที่อ่านได้">
+                  <button type="button" class="btn btn-primary btn-sm" onclick="useOcrResult()">✓ ใช้ค่านี้</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -623,6 +637,20 @@ tr:hover td { background: var(--gray-50); }
           <button class="btn btn-outline" onclick="resetRecordForm()">ล้างข้อมูล</button>
           <button class="btn btn-primary" onclick="saveRecord()" id="save-btn">💾 บันทึกข้อมูล</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Offline pending records -->
+    <div class="card" id="offline-pending-card" style="display:none">
+      <div class="card-header">
+        <span class="card-title">⏳ รอซิงค์ (บันทึกไว้ในเครื่อง ยังไม่ส่งขึ้นระบบ)</span>
+        <button class="btn btn-primary btn-sm" onclick="syncOfflineRecords()">🔄 ซิงค์ตอนนี้</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>วันที่</th><th>PEA NO.</th><th>kWh</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+          <tbody id="offline-pending-body"></tbody>
+        </table>
       </div>
     </div>
 
@@ -707,7 +735,7 @@ tr:hover td { background: var(--gray-50); }
             <tr>
               <th>วันที่</th><th>PEA NO.</th><th>จุดติดตั้ง</th>
               <th>kWh เดือนนี้</th><th>kWh เดือนก่อน</th><th>ผลต่าง</th><th>±%</th>
-              <th>ผู้บันทึก</th><th>จัดการ</th>
+              <th>หน่วยสุทธิ</th><th>ผู้บันทึก</th><th>จัดการ</th>
             </tr>
           </thead>
           <tbody id="monthly-body"></tbody>
@@ -880,7 +908,7 @@ tr:hover td { background: var(--gray-50); }
     <canvas id="chart-meter-detail" height="180" style="margin-bottom:1rem"></canvas>
     <div class="table-wrap" style="max-height:300px;overflow-y:auto">
       <table>
-        <thead><tr><th>วันที่</th><th>kWh</th><th>ผลต่าง</th><th>±%</th><th>ผู้บันทึก</th><th>รูป</th></tr></thead>
+        <thead><tr><th>วันที่</th><th>kWh</th><th>ผลต่าง</th><th>±%</th><th>หน่วยสุทธิ</th><th>ผู้บันทึก</th><th>รูป</th></tr></thead>
         <tbody id="meter-history-body"></tbody>
       </table>
     </div>
@@ -967,6 +995,7 @@ tr:hover td { background: var(--gray-50); }
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script>
 // ════════════════════════════════════════════
 // CONFIG — ตั้งค่า Apps Script Web App URL ที่นี่
@@ -978,6 +1007,7 @@ const CONFIG = {
   ANOMALY_THRESHOLD: 10,
   TOKEN_STORAGE_KEY: 'pea_token',
   USER_STORAGE_KEY: 'pea_user',
+  OFFLINE_QUEUE_KEY: 'pea_offline_queue', // ใช้ localStorage (คงอยู่ข้ามเซสชัน ไม่เหมือน token ที่ใช้ sessionStorage)
 };
 
 // ════════════════════════════════════════════
@@ -1030,6 +1060,139 @@ function forceLogout(message) {
     const el = document.getElementById('auth-error');
     el.textContent = message;
     el.style.display = 'block';
+  }
+}
+
+// ════════════════════════════════════════════
+// OFFLINE QUEUE — บันทึกหน่วยไว้ในเครื่องตอนไม่มีเน็ต แล้วกด Sync เองทีหลัง
+// ════════════════════════════════════════════
+
+function getOfflineQueue() {
+  try {
+    const raw = localStorage.getItem(CONFIG.OFFLINE_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function setOfflineQueue(queue) {
+  localStorage.setItem(CONFIG.OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+}
+
+function addToOfflineQueue(record) {
+  const queue = getOfflineQueue();
+  queue.push({ ...record, _offlineId: 'off_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8), _status: 'pending' });
+  setOfflineQueue(queue);
+  updateOfflineUI();
+}
+
+function removeFromOfflineQueue(offlineId) {
+  const queue = getOfflineQueue().filter(r => r._offlineId !== offlineId);
+  setOfflineQueue(queue);
+  updateOfflineUI();
+}
+
+function updateOfflineUI() {
+  const queue = getOfflineQueue();
+  const count = queue.length;
+
+  const syncBtn = document.getElementById('sync-btn');
+  if (syncBtn) {
+    syncBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+    syncBtn.innerHTML = `🔄 ซิงค์ข้อมูล (${count})`;
+  }
+
+  const pendingCard = document.getElementById('offline-pending-card');
+  const pendingBody = document.getElementById('offline-pending-body');
+  if (pendingCard && pendingBody) {
+    pendingCard.style.display = count > 0 ? 'block' : 'none';
+    pendingBody.innerHTML = queue.map(r => {
+      const statusLabel = r._status === 'error'
+        ? `<span class="badge badge-danger">❌ ผิดพลาด</span>`
+        : `<span class="badge badge-warning">⏳ รอซิงค์</span>`;
+      return `<tr>
+        <td>${fmtDate(r.date)}</td>
+        <td><b>${r.peaNo}</b></td>
+        <td>${fmtNum(r.kwh)}</td>
+        <td>${statusLabel}</td>
+        <td><button class="btn btn-sm btn-outline" onclick="removeFromOfflineQueue('${r._offlineId}')">🗑️ ลบ</button></td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function updateOnlineStatusUI() {
+  const indicator = document.getElementById('offline-indicator');
+  if (!indicator) return;
+  indicator.style.display = navigator.onLine ? 'none' : 'inline-block';
+}
+
+window.addEventListener('online', () => {
+  updateOnlineStatusUI();
+  // ลองซิงค์อัตโนมัติเมื่อเน็ตกลับมา (เงียบๆ ไม่รบกวนด้วย alert ถ้าไม่มีอะไรในคิว)
+  if (getOfflineQueue().length > 0 && currentUser) {
+    syncOfflineRecords();
+  }
+});
+window.addEventListener('offline', updateOnlineStatusUI);
+
+/**
+ * พยายามซิงค์ทุกรายการที่ค้างอยู่ใน offline queue ขึ้น server
+ * ทำทีละรายการตามลำดับ เพื่อไม่ให้ยิง request พร้อมกันจำนวนมาก
+ */
+async function syncOfflineRecords() {
+  if (!navigator.onLine) {
+    alert('⚠️ ยังไม่มีสัญญาณอินเทอร์เน็ต กรุณาเชื่อมต่อแล้วลองใหม่');
+    return;
+  }
+
+  const queue = getOfflineQueue();
+  if (queue.length === 0) return;
+
+  const syncBtn = document.getElementById('sync-btn');
+  const originalText = syncBtn ? syncBtn.innerHTML : '';
+  if (syncBtn) { syncBtn.disabled = true; syncBtn.innerHTML = '<span class="spinner"></span> กำลังซิงค์...'; }
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const rec of [...queue]) {
+    try {
+      await apiPost('addReading', {
+        date: rec.date,
+        peaNo: rec.peaNo,
+        kwh: rec.kwh,
+        resetDate: rec.resetDate,
+        lat: rec.lat,
+        lng: rec.lng,
+        photoBase64: rec.photoBase64 || '',
+        photoMimeType: rec.photoMimeType || '',
+        org: rec.org || '',
+        note: rec.note || '',
+      });
+      removeFromOfflineQueue(rec._offlineId);
+      successCount++;
+    } catch (err) {
+      // ตั้งสถานะ error แต่ยังเก็บไว้ในคิว ให้ผู้ใช้เลือกลบหรือลองใหม่เอง
+      const updated = getOfflineQueue().map(r => r._offlineId === rec._offlineId ? { ...r, _status: 'error' } : r);
+      setOfflineQueue(updated);
+      updateOfflineUI();
+      failCount++;
+    }
+  }
+
+  if (syncBtn) { syncBtn.disabled = false; syncBtn.innerHTML = originalText; }
+
+  await loadReadings();
+  renderMyRecords();
+  renderDashboard();
+  updateOfflineUI();
+
+  if (failCount === 0) {
+    alert(`✅ ซิงค์สำเร็จทั้งหมด ${successCount} รายการ`);
+  } else {
+    alert(`ซิงค์สำเร็จ ${successCount} รายการ, ผิดพลาด ${failCount} รายการ (ยังอยู่ในรายการรอซิงค์ ลองใหม่ได้)`);
   }
 }
 
@@ -1122,23 +1285,46 @@ async function tryResumeSession() {
   const storedUser = getStoredUser();
   if (!token || !storedUser) return false;
 
+  // ถ้าไม่มีเน็ตตั้งแต่เปิดแอป ให้เข้าระบบด้วยข้อมูล user ที่แคชไว้ก่อน
+  // (ใช้บันทึกแบบออฟไลน์ได้ทันที ไม่ต้องรอเน็ตกลับมาเพื่อ "เข้าระบบ")
+  if (!navigator.onLine) {
+    currentUser = storedUser;
+    enterAppUI();
+    await initApp(); // initApp เองจะ fallback เป็นโหมดออฟไลน์ถ้าโหลดข้อมูลไม่สำเร็จ
+    return true;
+  }
+
   try {
     await apiGet('whoami');
     currentUser = storedUser;
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'flex';
-    document.getElementById('app').style.flexDirection = 'column';
-    document.getElementById('topbar-username').textContent = currentUser.name;
-    document.getElementById('topbar-avatar').textContent = currentUser.name.charAt(0);
-    document.querySelectorAll('.admin-only').forEach(el => {
-      el.style.display = currentUser.role === 'admin' ? '' : 'none';
-    });
+    enterAppUI();
     await initApp();
     return true;
   } catch (e) {
+    // ถ้า error เป็นปัญหาเน็ต/fetch (ไม่ใช่ token จริงๆไม่ถูกต้องจาก server) ให้ลองเข้าแบบออฟไลน์เช่นกัน
+    // เพื่อไม่ล็อกผู้ใช้ออกแค่เพราะสัญญาณไม่ดีชั่วขณะ
+    if (e.message && e.message.includes('fetch')) {
+      currentUser = storedUser;
+      enterAppUI();
+      await initApp();
+      return true;
+    }
     clearToken();
     return false;
   }
+}
+
+function enterAppUI() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('app').style.flexDirection = 'column';
+  document.getElementById('topbar-username').textContent = currentUser.name;
+  document.getElementById('topbar-avatar').textContent = currentUser.name.charAt(0);
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = currentUser.role === 'admin' ? '' : 'none';
+  });
+  updateOnlineStatusUI();
+  updateOfflineUI();
 }
 
 tryResumeSession();
@@ -1152,36 +1338,70 @@ async function initApp() {
   try {
     await Promise.all([loadMeters(), loadReadings()]);
     if (currentUser.role === 'admin') await loadUsers();
-
-    populateYearSelects();
-    populatePeaSelects();
-    initRecordForm();
-    renderDashboard();
-    renderMeters();
-    renderMonthly();
-    renderAnomalies();
-    renderReport();
-    renderMyRecords();
-    if (currentUser.role === 'admin') renderUsers();
   } catch (err) {
-    alert('โหลดข้อมูลไม่สำเร็จ: ' + err.message);
-  } finally {
-    showGlobalLoading(false);
+    // โหลดจากเซิร์ฟเวอร์ไม่ได้ (ออฟไลน์/เน็ตหลุด) → ใช้ข้อมูลที่แคชไว้ล่าสุดแทน เพื่อให้ยังเปิดแอปและบันทึกแบบออฟไลน์ได้
+    const restored = restoreCachedAppData();
+    if (!restored) {
+      alert('โหลดข้อมูลไม่สำเร็จ และไม่มีข้อมูลที่บันทึกไว้ในเครื่อง: ' + err.message);
+    } else if (!navigator.onLine) {
+      // เงียบไว้ ไม่ต้องเตือน เพราะ indicator "ออฟไลน์" ที่แถบบนแสดงอยู่แล้ว
+    } else {
+      alert('โหลดข้อมูลล่าสุดจากเซิร์ฟเวอร์ไม่สำเร็จ ใช้ข้อมูลที่บันทึกไว้ในเครื่องแทน: ' + err.message);
+    }
   }
+
+  populateYearSelects();
+  populatePeaSelects();
+  initRecordForm();
+  renderDashboard();
+  renderMeters();
+  renderMonthly();
+  renderAnomalies();
+  renderReport();
+  renderMyRecords();
+  if (currentUser.role === 'admin') renderUsers();
+  updateOfflineUI();
+  updateOnlineStatusUI();
+  showGlobalLoading(false);
 }
 
 function showGlobalLoading(show) {
   // จุดเสริม: ใส่ overlay loading ตรงนี้ได้ถ้าต้องการ
 }
 
+/** เก็บสำเนาข้อมูลล่าสุด (meters/readings) ไว้ใน localStorage สำหรับใช้งานตอนออฟไลน์ */
+function cacheAppData() {
+  try {
+    localStorage.setItem('pea_cache_meters', JSON.stringify(meters));
+    localStorage.setItem('pea_cache_readings', JSON.stringify(readings));
+    localStorage.setItem('pea_cache_timestamp', new Date().toISOString());
+  } catch (e) { /* เต็มพื้นที่หรือ private mode — ไม่ critical ข้ามไปได้ */ }
+}
+
+/** กู้ข้อมูลที่แคชไว้กลับมาใช้ตอนโหลดจากเซิร์ฟเวอร์ไม่ได้ คืนค่า true ถ้ามีข้อมูลให้กู้ */
+function restoreCachedAppData() {
+  try {
+    const cachedMeters = localStorage.getItem('pea_cache_meters');
+    const cachedReadings = localStorage.getItem('pea_cache_readings');
+    if (!cachedMeters || !cachedReadings) return false;
+    meters = JSON.parse(cachedMeters);
+    readings = JSON.parse(cachedReadings);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function loadMeters() {
   const json = await apiGet('getMeters');
   meters = json.meters.map(m => ({ ...m, kv: Number(m.kv) }));
+  cacheAppData();
 }
 
 async function loadReadings() {
   const json = await apiGet('getReadings');
   readings = json.readings.map(r => ({ ...r, kwh: Number(r.kwh), year: Number(r.year), month: Number(r.month) }));
+  cacheAppData();
 }
 
 async function loadUsers() {
@@ -1229,7 +1449,7 @@ function showTab(tab) {
   if (tab === 'monthly') renderMonthly();
   if (tab === 'anomaly') renderAnomalies();
   if (tab === 'report') renderReport();
-  if (tab === 'record') renderMyRecords();
+  if (tab === 'record') { renderMyRecords(); updateOfflineUI(); }
   if (tab === 'users') renderUsers();
 }
 
@@ -1253,6 +1473,24 @@ function thMonth(m) {
 }
 
 function getMeter(peaNo) { return meters.find(m => m.peaNo === peaNo); }
+
+/**
+ * คำนวณหน่วยสุทธิ = kWh ดิบ × ตัวคูณของมิเตอร์ (maxKwh)
+ * คืนค่า { multiplier, net } หรือ null ถ้าไม่พบเครื่องวัด/ตัวคูณ
+ */
+function netUnits(peaNo, kwh) {
+  const m = getMeter(peaNo);
+  if (!m || !m.maxKwh) return null;
+  const multiplier = Number(m.maxKwh);
+  return { multiplier, net: Number(kwh) * multiplier };
+}
+
+/** สร้าง HTML แสดง "kWh × ตัวคูณ = หน่วยสุทธิ" แบบกระชับ ใช้ในตาราง */
+function netUnitsHtml(peaNo, kwh) {
+  const r = netUnits(peaNo, kwh);
+  if (!r) return '<span style="color:var(--gray-400);font-size:11px">-</span>';
+  return `<span style="font-size:11px;color:var(--gray-600)">${fmtNum(kwh)} × ${fmtNum(r.multiplier).replace(/\.00$/,'')} =</span><br><b>${fmtNum(r.net)}</b>`;
+}
 
 function getPrevReading(peaNo, year, month) {
   let py = year, pm = month - 1;
@@ -1290,6 +1528,10 @@ function renderDashboard() {
   if (month) filtered = filtered.filter(r => r.month === month);
 
   const totalKwh = filtered.reduce((s, r) => s + r.kwh, 0);
+  const totalNetKwh = filtered.reduce((s, r) => {
+    const n = netUnits(r.peaNo, r.kwh);
+    return s + (n ? n.net : 0);
+  }, 0);
   const anomalies = getAnomalies(year, month, 10);
 
   document.getElementById('dash-subtitle').textContent =
@@ -1312,9 +1554,14 @@ function renderDashboard() {
       <div class="stat-sub">รายการ ≥10%</div>
     </div>
     <div class="stat-card primary">
-      <div class="stat-label">หน่วยรวม</div>
+      <div class="stat-label">หน่วยรวม (kWh)</div>
       <div class="stat-value" style="font-size:20px">${(totalKwh / 1000).toFixed(1)}k</div>
-      <div class="stat-sub">kWh</div>
+      <div class="stat-sub">kWh ดิบ</div>
+    </div>
+    <div class="stat-card primary">
+      <div class="stat-label">หน่วยสุทธิรวม</div>
+      <div class="stat-value" style="font-size:20px">${(totalNetKwh / 1000).toFixed(1)}k</div>
+      <div class="stat-sub">หลังคูณตัวคูณ</div>
     </div>
   `;
 
@@ -1399,6 +1646,18 @@ function checkAnomaly() {
   const peaNo = document.getElementById('rec-pea').value;
   const kwh = +document.getElementById('rec-kwh').value;
   const msgEl = document.getElementById('rec-anomaly-msg');
+  const netEl = document.getElementById('rec-net-units');
+
+  // แสดงหน่วยสุทธิ (kWh × ตัวคูณ) ทุกครั้งที่มีทั้งเครื่องวัดและค่า kWh
+  if (peaNo && kwh) {
+    const n = netUnits(peaNo, kwh);
+    netEl.innerHTML = n
+      ? `📐 ${fmtNum(kwh)} × ${fmtNum(n.multiplier).replace(/\.00$/,'')} = <b>${fmtNum(n.net)} หน่วยสุทธิ</b>`
+      : '';
+  } else {
+    netEl.innerHTML = '';
+  }
+
   if (!peaNo || !kwh) { msgEl.innerHTML = ''; return; }
 
   const now = new Date();
@@ -1445,6 +1704,75 @@ function previewPhoto(input) {
     document.getElementById('photo-placeholder').style.display = 'none';
   };
   reader.readAsDataURL(file);
+
+  // โชว์ปุ่ม OCR และล้างผลลัพธ์เก่าทุกครั้งที่เปลี่ยนรูป
+  document.getElementById('ocr-section').style.display = 'block';
+  document.getElementById('ocr-result-box').style.display = 'none';
+  document.getElementById('ocr-btn').disabled = false;
+  document.getElementById('ocr-btn').innerHTML = '🔍 อ่านเลขจากรูป (ทดลอง)';
+}
+
+/**
+ * รัน OCR (Tesseract.js) บนรูปที่เลือกไว้ เพื่ออ่านตัวเลขมิเตอร์อัตโนมัติ
+ * หมายเหตุ: เป็นฟีเจอร์ทดลอง ความแม่นยำขึ้นกับความชัดของรูป/แสง/มุมถ่าย
+ * ผลลัพธ์ต้องให้ผู้ใช้ตรวจสอบและกดยืนยันก่อนนำไปใช้เสมอ ไม่กรอกอัตโนมัติ
+ */
+async function runOcrOnPhoto() {
+  const photoInput = document.getElementById('rec-photo');
+  const file = photoInput.files[0];
+  if (!file) { alert('กรุณาถ่ายรูป/แนบรูปก่อน'); return; }
+
+  if (typeof Tesseract === 'undefined') {
+    alert('ไม่สามารถโหลดไลบรารี OCR ได้ (อาจเป็นเพราะไม่มีอินเทอร์เน็ต) — กรุณากรอกตัวเลขด้วยตนเอง');
+    return;
+  }
+
+  const btn = document.getElementById('ocr-btn');
+  const resultBox = document.getElementById('ocr-result-box');
+  const resultInput = document.getElementById('ocr-result-text');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> กำลังอ่านเลข... (อาจใช้เวลา 5-15 วินาที)';
+  resultBox.style.display = 'none';
+
+  try {
+    const imageSrc = document.getElementById('photo-preview').src;
+    const { data } = await Tesseract.recognize(imageSrc, 'eng', {
+      // จำกัดชุดตัวอักษรให้เหลือแค่ตัวเลขและจุดทศนิยม ช่วยเพิ่มความแม่นยำสำหรับเลขมิเตอร์
+      tessedit_char_whitelist: '0123456789.',
+    });
+
+    // ดึงเฉพาะตัวเลข/จุดทศนิยมจากผลลัพธ์ดิบ ตัดช่องว่างและตัวอักษรแปลกปลอมทิ้ง
+    const rawText = (data.text || '').trim();
+    const cleaned = rawText.replace(/[^0-9.]/g, '');
+
+    if (!cleaned) {
+      resultInput.value = '';
+      resultInput.placeholder = 'อ่านไม่พบตัวเลข กรุณากรอกเอง';
+    } else {
+      resultInput.value = cleaned;
+    }
+
+    resultBox.style.display = 'block';
+    btn.innerHTML = '🔍 อ่านอีกครั้ง';
+  } catch (err) {
+    alert('อ่านเลขจากรูปไม่สำเร็จ: ' + err.message + '\nกรุณากรอกตัวเลขด้วยตนเอง');
+    btn.innerHTML = '🔍 อ่านเลขจากรูป (ทดลอง)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/** นำค่าตัวเลขที่ผู้ใช้ตรวจสอบ/แก้ไขแล้วจากกล่อง OCR ไปเติมในช่อง kWh */
+function useOcrResult() {
+  const value = document.getElementById('ocr-result-text').value.trim();
+  if (!value || isNaN(+value)) {
+    alert('กรุณาตรวจสอบให้เป็นตัวเลขที่ถูกต้องก่อนใช้ค่านี้');
+    return;
+  }
+  document.getElementById('rec-kwh').value = value;
+  checkAnomaly();
+  document.getElementById('ocr-result-box').style.display = 'none';
 }
 
 /**
@@ -1506,30 +1834,52 @@ async function saveRecord() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> กำลังบันทึก...';
 
-  try {
-    let photoBase64 = '';
-    let photoMimeType = '';
+  let photoBase64 = '';
+  let photoMimeType = '';
 
+  try {
     if (photoInput.files[0]) {
       btn.innerHTML = '<span class="spinner"></span> กำลังเตรียมรูป...';
       const compressed = await compressImage(photoInput.files[0], 1280, 0.75);
       photoMimeType = compressed.mimeType;
       photoBase64 = compressed.base64; // ส่งเฉพาะส่วน base64 ไม่รวม prefix data:...
-      btn.innerHTML = '<span class="spinner"></span> กำลังอัปโหลดรูปขึ้น Drive...';
     }
+  } catch (err) {
+    alert('เตรียมรูปไม่สำเร็จ: ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = '💾 บันทึกข้อมูล';
+    return;
+  }
 
-    const result = await apiPost('addReading', {
-      date: d.toISOString(),
-      peaNo,
-      kwh,
-      resetDate: document.getElementById('rec-reset-date').value,
-      lat: document.getElementById('rec-lat').value,
-      lng: document.getElementById('rec-lng').value,
-      photoBase64,
-      photoMimeType,
-      org: currentUser.org || '',
-      note: document.getElementById('rec-note').value,
-    });
+  const recordPayload = {
+    date: d.toISOString(),
+    peaNo,
+    kwh,
+    resetDate: document.getElementById('rec-reset-date').value,
+    lat: document.getElementById('rec-lat').value,
+    lng: document.getElementById('rec-lng').value,
+    photoBase64,
+    photoMimeType,
+    org: currentUser.org || '',
+    note: document.getElementById('rec-note').value,
+  };
+
+  // ถ้าเบราว์เซอร์ตรวจพบว่าไม่มีเน็ตอยู่แล้ว ไม่ต้องลองยิง fetch เลย เก็บเข้าคิวทันที
+  if (!navigator.onLine) {
+    addToOfflineQueue(recordPayload);
+    alert(`📴 ไม่มีสัญญาณอินเทอร์เน็ต — บันทึกไว้ในเครื่องแล้ว\nPEA: ${peaNo} | ${fmtNum(kwh)} kWh\nกดปุ่ม "ซิงค์ข้อมูล" ที่แถบบนเมื่อมีเน็ตแล้ว`);
+    resetRecordForm();
+    btn.disabled = false;
+    btn.innerHTML = '💾 บันทึกข้อมูล';
+    return;
+  }
+
+  try {
+    btn.innerHTML = photoBase64
+      ? '<span class="spinner"></span> กำลังอัปโหลดรูปขึ้น Drive...'
+      : '<span class="spinner"></span> กำลังบันทึก...';
+
+    const result = await apiPost('addReading', recordPayload);
 
     await loadReadings();
     alert(`✅ บันทึกสำเร็จ!\nPEA: ${peaNo} | ${fmtNum(kwh)} kWh${result.photoUrl ? '\n📷 อัปโหลดรูปขึ้น Drive แล้ว' : ''}`);
@@ -1537,7 +1887,10 @@ async function saveRecord() {
     renderMyRecords();
     renderDashboard();
   } catch (err) {
-    alert('บันทึกไม่สำเร็จ: ' + err.message);
+    // fetch ล้มเหลวระหว่างกำลังส่ง (เน็ตหลุดกะทันหัน/สัญญาณไม่พอ) → เก็บลงคิวออฟไลน์แทนการสูญข้อมูล
+    addToOfflineQueue(recordPayload);
+    alert(`⚠️ ส่งข้อมูลไม่สำเร็จ (${err.message}) — บันทึกไว้ในเครื่องแล้ว\nกดปุ่ม "ซิงค์ข้อมูล" ที่แถบบนเพื่อลองส่งใหม่ได้ทุกเมื่อ`);
+    resetRecordForm();
   } finally {
     btn.disabled = false;
     btn.innerHTML = '💾 บันทึกข้อมูล';
@@ -1557,6 +1910,9 @@ function resetRecordForm() {
   document.getElementById('rec-photo').value = '';
   document.getElementById('rec-meter-info-wrap').style.display = 'none';
   document.getElementById('rec-anomaly-msg').innerHTML = '';
+  document.getElementById('rec-net-units').innerHTML = '';
+  document.getElementById('ocr-section').style.display = 'none';
+  document.getElementById('ocr-result-box').style.display = 'none';
   initRecordForm();
 }
 
@@ -1811,6 +2167,7 @@ function showMeterDetail(peaNo) {
       <td>${fmtNum(r.kwh)}</td>
       <td>${d ? fmtNum(d.diff) : '-'}</td>
       <td>${d ? anomalyBadge(d.pct) : '-'}</td>
+      <td>${netUnitsHtml(r.peaNo, r.kwh)}</td>
       <td style="font-size:12px">${r.name || '-'}</td>
       <td>${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : '-'}</td>
     </tr>`;
@@ -1872,6 +2229,10 @@ function renderMonthly() {
   recs = recs.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const total = recs.reduce((s, r) => s + r.kwh, 0);
+  const totalNet = recs.reduce((s, r) => {
+    const n = netUnits(r.peaNo, r.kwh);
+    return s + (n ? n.net : 0);
+  }, 0);
   const anomCount = recs.filter(r => {
     const prev = getPrevReading(r.peaNo, r.year, r.month);
     const d = calcDiff(r.kwh, prev);
@@ -1881,6 +2242,7 @@ function renderMonthly() {
   document.getElementById('mon-stats').innerHTML = `
     <div class="stat-card primary"><div class="stat-label">รายการ</div><div class="stat-value">${recs.length}</div></div>
     <div class="stat-card primary"><div class="stat-label">รวม kWh</div><div class="stat-value" style="font-size:20px">${(total/1000).toFixed(1)}k</div></div>
+    <div class="stat-card primary"><div class="stat-label">รวมหน่วยสุทธิ</div><div class="stat-value" style="font-size:18px">${(totalNet/1000).toFixed(1)}k</div></div>
     <div class="stat-card ${anomCount > 0 ? 'danger' : 'success'}"><div class="stat-label">ผิดปกติ</div><div class="stat-value">${anomCount}</div></div>
   `;
 
@@ -1897,6 +2259,7 @@ function renderMonthly() {
       <td>${prev ? fmtNum(prev.kwh) : '-'}</td>
       <td>${d ? fmtNum(d.diff) : '-'}</td>
       <td>${d ? anomalyBadge(d.pct) : '-'}</td>
+      <td>${netUnitsHtml(r.peaNo, r.kwh)}</td>
       <td style="font-size:12px">${r.name || '-'}</td>
       <td style="display:flex;gap:6px">
         ${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : ''}
@@ -1918,14 +2281,16 @@ function exportCSV() {
   let recs = readings.filter(r => r.year === year);
   if (month) recs = recs.filter(r => r.month === month);
 
-  const header = ['วันที่','PEA NO.','จุดติดตั้ง','kWh','เดือนก่อน','ผลต่าง','±%','ผู้บันทึก','lat','lng'];
+  const header = ['วันที่','PEA NO.','จุดติดตั้ง','kWh','เดือนก่อน','ผลต่าง','±%','ตัวคูณ','หน่วยสุทธิ','ผู้บันทึก','lat','lng'];
   const rows = recs.map(r => {
     const m = getMeter(r.peaNo);
     const prev = getPrevReading(r.peaNo, r.year, r.month);
     const d = calcDiff(r.kwh, prev);
+    const n = netUnits(r.peaNo, r.kwh);
     return [
       fmtDate(r.date), r.peaNo, m ? m.location : '',
       r.kwh, prev ? prev.kwh : '', d ? d.diff.toFixed(2) : '', d ? d.pct.toFixed(2) : '',
+      n ? n.multiplier : '', n ? n.net.toFixed(2) : '',
       r.name, r.lat, r.lng,
     ].join(',');
   });
@@ -2005,6 +2370,10 @@ function renderReport() {
   const recs = readings.filter(r => r.year === year && r.month === month);
   const anomalies = getAnomalies(year, month, 10);
   const totalKwh = recs.reduce((s, r) => s + r.kwh, 0);
+  const totalNetKwh = recs.reduce((s, r) => {
+    const n = netUnits(r.peaNo, r.kwh);
+    return s + (n ? n.net : 0);
+  }, 0);
 
   const byMeter = {};
   recs.forEach(r => {
@@ -2023,6 +2392,7 @@ function renderReport() {
         <div class="stats-grid" style="margin-bottom:1.5rem">
           <div class="stat-card primary"><div class="stat-label">จำนวนมิเตอร์</div><div class="stat-value">${Object.keys(byMeter).length}</div></div>
           <div class="stat-card primary"><div class="stat-label">รวม kWh</div><div class="stat-value" style="font-size:18px">${fmtNum(totalKwh)}</div></div>
+          <div class="stat-card primary"><div class="stat-label">รวมหน่วยสุทธิ</div><div class="stat-value" style="font-size:18px">${fmtNum(totalNetKwh)}</div></div>
           <div class="stat-card ${anomalies.length > 0 ? 'danger' : 'success'}"><div class="stat-label">ผิดปกติ</div><div class="stat-value">${anomalies.length}</div></div>
         </div>
 
@@ -2038,6 +2408,8 @@ function renderReport() {
                 <th style="background:var(--primary);color:white">kWh เดือนก่อน</th>
                 <th style="background:var(--primary);color:white">ผลต่าง</th>
                 <th style="background:var(--primary);color:white">±%</th>
+                <th style="background:var(--primary);color:white">ตัวคูณ</th>
+                <th style="background:var(--primary);color:white">หน่วยสุทธิ</th>
                 <th style="background:var(--primary);color:white">ผู้บันทึก</th>
                 <th style="background:var(--primary);color:white">หมายเหตุ</th>
               </tr>
@@ -2050,6 +2422,7 @@ function renderReport() {
                 const d = kwh !== null && prev ? calcDiff(kwh, prev) : null;
                 const rec = recList[0];
                 const isAnom = d && Math.abs(d.pct) >= 10;
+                const n = kwh !== null ? netUnits(m.peaNo, kwh) : null;
                 return `<tr style="${isAnom ? 'background:#fff8f8' : ''}">
                   <td>${m.id}</td>
                   <td><b>${m.peaNo}</b></td>
@@ -2059,6 +2432,8 @@ function renderReport() {
                   <td>${prev ? fmtNum(prev.kwh) : '-'}</td>
                   <td>${d ? fmtNum(d.diff) : '-'}</td>
                   <td>${d ? `<span class="${isAnom ? 'diff-high' : 'diff-ok'}">${d.pct > 0 ? '+' : ''}${d.pct.toFixed(1)}%</span>` : '-'}</td>
+                  <td>${fmtNum(m.maxKwh).replace(/\.00$/,'')}</td>
+                  <td><b>${n ? fmtNum(n.net) : '-'}</b></td>
                   <td style="font-size:11px">${rec ? rec.name : '-'}</td>
                   <td style="font-size:11px">${rec ? (rec.note || '') : ''}</td>
                 </tr>`;
@@ -2068,7 +2443,9 @@ function renderReport() {
               <tr style="background:var(--gray-50);font-weight:700">
                 <td colspan="4" style="text-align:right">รวมทั้งหมด</td>
                 <td>${fmtNum(totalKwh)}</td>
-                <td colspan="5"></td>
+                <td colspan="3"></td>
+                <td colspan="2">${fmtNum(totalNetKwh)}</td>
+                <td colspan="2"></td>
               </tr>
             </tfoot>
           </table>
