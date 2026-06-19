@@ -389,11 +389,33 @@ tr:hover td { background: var(--gray-50); }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 640px) {
-  .topbar { padding: 0 1rem; }
-  .nav-tabs { padding: 0 0.75rem; }
-  .page { padding: 1rem; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .topbar { padding: 0 0.75rem; height: auto; min-height: 52px; flex-wrap: wrap; gap: 4px; padding-top: 6px; padding-bottom: 6px; }
+  .topbar-brand { font-size: 14px; }
+  .topbar-user { gap: 6px; }
+  .topbar-user span#topbar-username { display: none; } /* ซ่อนชื่อบน mobile ประหยัดพื้นที่ */
+  .nav-tabs { padding: 0 0.25rem; }
+  .nav-tab { padding: 10px 10px; font-size: 12px; }
+  .page { padding: 0.75rem; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-card { padding: 0.85rem; }
+  .stat-value { font-size: 22px !important; }
   .hide-mobile { display: none; }
+  /* ฟอร์มบันทึก — 1 คอลัมน์บนมือถือ */
+  .form-grid-2 { grid-template-columns: 1fr !important; }
+  .form-grid-2 > .form-group[style*="grid-column:1/-1"] { grid-column: 1 !important; }
+  /* กล่อง dash-grid-2 — stack เป็น 1 คอลัมน์ */
+  .dash-grid-2 { grid-template-columns: 1fr !important; }
+  /* zoom container สูงขึ้นนิดบนมือถือจอแนวตั้ง */
+  #zoom-container { height: 260px !important; }
+  /* topbar sync/offline badges ย่อลง */
+  #sync-btn { font-size: 11px !important; padding: 4px 8px !important; }
+  /* modal เต็มหน้าจอ */
+  .modal { max-height: 95vh; }
+  /* card header wrap */
+  .card-header { flex-wrap: wrap; }
+  /* filter-bar stack */
+  .filter-bar { gap: 6px; }
+  .filter-bar select, .filter-bar input { font-size: 13px; padding: 7px 10px; }
 }
 
 /* ── ANOMALY HIGHLIGHT ── */
@@ -511,7 +533,7 @@ tr:hover td { background: var(--gray-50); }
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem;" class="dash-grid-2">
       <div class="card">
         <div class="card-header">
-          <span class="card-title">การใช้ไฟรายเดือน (kWh)</span>
+          <span class="card-title">หน่วยสุทธิรวมรายเดือน</span>
         </div>
         <div class="card-body">
           <canvas id="chart-monthly" height="200"></canvas>
@@ -600,14 +622,17 @@ tr:hover td { background: var(--gray-50); }
               <img id="photo-preview" class="photo-preview">
             </div>
 
-            <div id="ocr-section" style="display:none;margin-top:10px">
-              <button type="button" class="btn btn-outline btn-sm" id="ocr-btn" onclick="runOcrOnPhoto()">🔍 อ่านเลขจากรูป (ทดลอง)</button>
-              <div id="ocr-result-box" style="display:none;margin-top:10px;padding:12px;background:var(--gray-50);border-radius:var(--radius);border:1px solid var(--gray-200)">
-                <div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">ผลที่อ่านได้ (ตรวจสอบ/แก้ไขให้ถูกต้องก่อนใช้ — OCR อาจอ่านผิดได้)</div>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <input type="text" id="ocr-result-text" class="form-control" style="flex:1" placeholder="ตัวเลขที่อ่านได้">
-                  <button type="button" class="btn btn-primary btn-sm" onclick="useOcrResult()">✓ ใช้ค่านี้</button>
-                </div>
+            <!-- ── ZOOM VIEWER ── แสดงหลังถ่ายรูป ให้ผู้ใช้ซูม/เลื่อนดูเลขก่อนพิมพ์ -->
+            <div id="zoom-section" style="display:none;margin-top:12px">
+              <div style="font-size:12px;color:var(--primary-dark);margin-bottom:6px;font-weight:600">🔍 ซูมดูเลขมิเตอร์ — แล้วพิมพ์ตัวเลขลงช่องด้านล่าง</div>
+              <div id="zoom-container" style="position:relative;overflow:hidden;border-radius:var(--radius);border:2px solid var(--primary);background:#111;touch-action:none;cursor:grab;user-select:none;height:220px">
+                <img id="zoom-img" style="position:absolute;transform-origin:0 0;max-width:none;max-height:none;will-change:transform" draggable="false">
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+                <button type="button" class="btn btn-outline btn-sm" onclick="zoomIn()">🔍＋</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="zoomOut()">🔍－</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="zoomReset()">↺ รีเซต</button>
+                <span style="font-size:11px;color:var(--gray-400)">ลากเลื่อนรูป · Pinch ซูม</span>
               </div>
             </div>
           </div>
@@ -995,7 +1020,7 @@ tr:hover td { background: var(--gray-50); }
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+
 <script>
 // ════════════════════════════════════════════
 // CONFIG — ตั้งค่า Apps Script Web App URL ที่นี่
@@ -1568,7 +1593,8 @@ function renderDashboard() {
   const monthlyData = {};
   readings.filter(r => r.year === year).forEach(r => {
     if (!monthlyData[r.month]) monthlyData[r.month] = 0;
-    monthlyData[r.month] += r.kwh;
+    const n = netUnits(r.peaNo, r.kwh);
+    monthlyData[r.month] += n ? n.net : 0;
   });
   const labels = Array.from({ length: 12 }, (_, i) => thMonth(i + 1));
   const values = Array.from({ length: 12 }, (_, i) => +(monthlyData[i + 1] || 0).toFixed(2));
@@ -1577,11 +1603,11 @@ function renderDashboard() {
   const ctx = document.getElementById('chart-monthly').getContext('2d');
   chartMonthly = new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets: [{ label: 'kWh รวม', data: values, backgroundColor: 'rgba(26, 79, 160, 0.75)', borderRadius: 5 }] },
+    data: { labels, datasets: [{ label: 'หน่วยสุทธิรวม', data: values, backgroundColor: 'rgba(26, 79, 160, 0.75)', borderRadius: 5 }] },
     options: {
       responsive: true,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { callback: v => (v / 1000).toFixed(0) + 'k' } } }
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => 'หน่วยสุทธิ: ' + ctx.parsed.y.toLocaleString('th-TH', {minimumFractionDigits:0}) } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => (v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'k' : v) } } }
     }
   });
 
@@ -1702,78 +1728,150 @@ function previewPhoto(input) {
     img.src = e.target.result;
     img.style.display = 'block';
     document.getElementById('photo-placeholder').style.display = 'none';
+    // โหลดรูปเข้า zoom viewer
+    initZoomViewer(e.target.result);
   };
   reader.readAsDataURL(file);
-
-  // โชว์ปุ่ม OCR และล้างผลลัพธ์เก่าทุกครั้งที่เปลี่ยนรูป
-  document.getElementById('ocr-section').style.display = 'block';
-  document.getElementById('ocr-result-box').style.display = 'none';
-  document.getElementById('ocr-btn').disabled = false;
-  document.getElementById('ocr-btn').innerHTML = '🔍 อ่านเลขจากรูป (ทดลอง)';
 }
 
-/**
- * รัน OCR (Tesseract.js) บนรูปที่เลือกไว้ เพื่ออ่านตัวเลขมิเตอร์อัตโนมัติ
- * หมายเหตุ: เป็นฟีเจอร์ทดลอง ความแม่นยำขึ้นกับความชัดของรูป/แสง/มุมถ่าย
- * ผลลัพธ์ต้องให้ผู้ใช้ตรวจสอบและกดยืนยันก่อนนำไปใช้เสมอ ไม่กรอกอัตโนมัติ
- */
-async function runOcrOnPhoto() {
-  const photoInput = document.getElementById('rec-photo');
-  const file = photoInput.files[0];
-  if (!file) { alert('กรุณาถ่ายรูป/แนบรูปก่อน'); return; }
+// ════════════════════════════════════════════
+// ZOOM VIEWER — ดูรูปมิเตอร์แบบซูม/เลื่อน
+// ════════════════════════════════════════════
 
-  if (typeof Tesseract === 'undefined') {
-    alert('ไม่สามารถโหลดไลบรารี OCR ได้ (อาจเป็นเพราะไม่มีอินเทอร์เน็ต) — กรุณากรอกตัวเลขด้วยตนเอง');
-    return;
-  }
+let _zoomScale = 1;
+let _zoomX = 0, _zoomY = 0;
+let _zoomDragging = false;
+let _zoomLastX = 0, _zoomLastY = 0;
+let _zoomPinchDist = 0;
+let _zoomImgW = 0, _zoomImgH = 0;
 
-  const btn = document.getElementById('ocr-btn');
-  const resultBox = document.getElementById('ocr-result-box');
-  const resultInput = document.getElementById('ocr-result-text');
+function initZoomViewer(src) {
+  const section = document.getElementById('zoom-section');
+  const container = document.getElementById('zoom-container');
+  const img = document.getElementById('zoom-img');
 
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> กำลังอ่านเลข... (อาจใช้เวลา 5-15 วินาที)';
-  resultBox.style.display = 'none';
+  section.style.display = 'block';
+  img.src = src;
+  img.onload = () => {
+    _zoomImgW = img.naturalWidth;
+    _zoomImgH = img.naturalHeight;
+    const cW = container.clientWidth;
+    const cH = container.clientHeight;
+    // ตั้ง scale เริ่มต้นให้รูปพอดีกับกรอบ แล้วซูม 2x เพื่อเห็นเลขชัด
+    const fitScale = Math.min(cW / _zoomImgW, cH / _zoomImgH);
+    _zoomScale = fitScale * 2;
+    // จัดตำแหน่งให้กึ่งกลางรูปอยู่กลางกรอบ
+    _zoomX = (cW - _zoomImgW * _zoomScale) / 2;
+    _zoomY = (cH - _zoomImgH * _zoomScale) / 2;
+    applyZoom();
+  };
+}
 
-  try {
-    const imageSrc = document.getElementById('photo-preview').src;
-    const { data } = await Tesseract.recognize(imageSrc, 'eng', {
-      // จำกัดชุดตัวอักษรให้เหลือแค่ตัวเลขและจุดทศนิยม ช่วยเพิ่มความแม่นยำสำหรับเลขมิเตอร์
-      tessedit_char_whitelist: '0123456789.',
-    });
+function applyZoom() {
+  const img = document.getElementById('zoom-img');
+  img.style.transform = `translate(${_zoomX}px, ${_zoomY}px) scale(${_zoomScale})`;
+}
 
-    // ดึงเฉพาะตัวเลข/จุดทศนิยมจากผลลัพธ์ดิบ ตัดช่องว่างและตัวอักษรแปลกปลอมทิ้ง
-    const rawText = (data.text || '').trim();
-    const cleaned = rawText.replace(/[^0-9.]/g, '');
+function clampZoom() {
+  const container = document.getElementById('zoom-container');
+  const cW = container.clientWidth, cH = container.clientHeight;
+  const iW = _zoomImgW * _zoomScale, iH = _zoomImgH * _zoomScale;
+  // ไม่ให้เลื่อนออกนอกกรอบจนเห็นช่องว่างมาก
+  const minX = Math.min(0, cW - iW);
+  const minY = Math.min(0, cH - iH);
+  _zoomX = Math.max(minX, Math.min(0, _zoomX));
+  _zoomY = Math.max(minY, Math.min(0, _zoomY));
+}
 
-    if (!cleaned) {
-      resultInput.value = '';
-      resultInput.placeholder = 'อ่านไม่พบตัวเลข กรุณากรอกเอง';
-    } else {
-      resultInput.value = cleaned;
+function zoomIn()  { _zoomScale = Math.min(_zoomScale * 1.4, 12); clampZoom(); applyZoom(); }
+function zoomOut() { _zoomScale = Math.max(_zoomScale / 1.4, 0.5); clampZoom(); applyZoom(); }
+function zoomReset() {
+  const container = document.getElementById('zoom-container');
+  const cW = container.clientWidth, cH = container.clientHeight;
+  const fitScale = Math.min(cW / _zoomImgW, cH / _zoomImgH);
+  _zoomScale = fitScale * 2;
+  _zoomX = (cW - _zoomImgW * _zoomScale) / 2;
+  _zoomY = (cH - _zoomImgH * _zoomScale) / 2;
+  applyZoom();
+}
+
+// ── Mouse events ──
+document.addEventListener('DOMContentLoaded', () => {
+  const container = document.getElementById('zoom-container');
+  if (!container) return;
+
+  container.addEventListener('mousedown', e => {
+    _zoomDragging = true;
+    _zoomLastX = e.clientX; _zoomLastY = e.clientY;
+    container.style.cursor = 'grabbing';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!_zoomDragging) return;
+    _zoomX += e.clientX - _zoomLastX;
+    _zoomY += e.clientY - _zoomLastY;
+    _zoomLastX = e.clientX; _zoomLastY = e.clientY;
+    clampZoom(); applyZoom();
+  });
+  document.addEventListener('mouseup', () => {
+    _zoomDragging = false;
+    if (container) container.style.cursor = 'grab';
+  });
+
+  // scroll to zoom (desktop)
+  container.addEventListener('wheel', e => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const rect = container.getBoundingClientRect();
+    const px = e.clientX - rect.left, py = e.clientY - rect.top;
+    _zoomX = px - (px - _zoomX) * factor;
+    _zoomY = py - (py - _zoomY) * factor;
+    _zoomScale = Math.max(0.5, Math.min(12, _zoomScale * factor));
+    clampZoom(); applyZoom();
+  }, { passive: false });
+
+  // ── Touch events (drag + pinch) ──
+  container.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      _zoomDragging = true;
+      _zoomLastX = e.touches[0].clientX; _zoomLastY = e.touches[0].clientY;
+    } else if (e.touches.length === 2) {
+      _zoomDragging = false;
+      _zoomPinchDist = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      );
     }
+  }, { passive: true });
 
-    resultBox.style.display = 'block';
-    btn.innerHTML = '🔍 อ่านอีกครั้ง';
-  } catch (err) {
-    alert('อ่านเลขจากรูปไม่สำเร็จ: ' + err.message + '\nกรุณากรอกตัวเลขด้วยตนเอง');
-    btn.innerHTML = '🔍 อ่านเลขจากรูป (ทดลอง)';
-  } finally {
-    btn.disabled = false;
-  }
-}
+  container.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && _zoomDragging) {
+      _zoomX += e.touches[0].clientX - _zoomLastX;
+      _zoomY += e.touches[0].clientY - _zoomLastY;
+      _zoomLastX = e.touches[0].clientX; _zoomLastY = e.touches[0].clientY;
+      clampZoom(); applyZoom();
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      );
+      if (_zoomPinchDist > 0) {
+        const factor = dist / _zoomPinchDist;
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const rect = container.getBoundingClientRect();
+        const px = cx - rect.left, py = cy - rect.top;
+        _zoomX = px - (px - _zoomX) * factor;
+        _zoomY = py - (py - _zoomY) * factor;
+        _zoomScale = Math.max(0.5, Math.min(12, _zoomScale * factor));
+        clampZoom(); applyZoom();
+      }
+      _zoomPinchDist = dist;
+    }
+  }, { passive: false });
 
-/** นำค่าตัวเลขที่ผู้ใช้ตรวจสอบ/แก้ไขแล้วจากกล่อง OCR ไปเติมในช่อง kWh */
-function useOcrResult() {
-  const value = document.getElementById('ocr-result-text').value.trim();
-  if (!value || isNaN(+value)) {
-    alert('กรุณาตรวจสอบให้เป็นตัวเลขที่ถูกต้องก่อนใช้ค่านี้');
-    return;
-  }
-  document.getElementById('rec-kwh').value = value;
-  checkAnomaly();
-  document.getElementById('ocr-result-box').style.display = 'none';
-}
+  container.addEventListener('touchend', () => { _zoomDragging = false; _zoomPinchDist = 0; });
+});
 
 /**
  * ย่อขนาดรูปก่อนส่งขึ้น Drive เพื่อลดขนาดไฟล์และเวลาอัปโหลด
@@ -1911,8 +2009,9 @@ function resetRecordForm() {
   document.getElementById('rec-meter-info-wrap').style.display = 'none';
   document.getElementById('rec-anomaly-msg').innerHTML = '';
   document.getElementById('rec-net-units').innerHTML = '';
-  document.getElementById('ocr-section').style.display = 'none';
-  document.getElementById('ocr-result-box').style.display = 'none';
+  document.getElementById('ocr-section') && (document.getElementById('ocr-section').style.display = 'none');
+  document.getElementById('zoom-section').style.display = 'none';
+  document.getElementById('zoom-img').src = '';
   initRecordForm();
 }
 
