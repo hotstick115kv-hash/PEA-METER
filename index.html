@@ -589,7 +589,7 @@ tr:hover td { background: var(--gray-50); }
           </div>
 
           <div class="form-group">
-            <label class="form-label">วัน-เดือน-ปี Reset ครั้งสุดท้าย</label>
+            <label class="form-label">วัน-เดือน-ปี Reset ครั้งสุดท้าย *</label>
             <input type="date" id="rec-reset-date" class="form-control">
           </div>
 
@@ -1964,6 +1964,8 @@ async function saveRecord() {
 
   if (!peaNo) { alert('กรุณาเลือกเครื่องวัด'); return; }
   if (!kwh && kwh !== 0) { alert('กรุณากรอกหน่วย kWh'); return; }
+  const resetDate = document.getElementById('rec-reset-date').value;
+  if (!resetDate) { alert('กรุณากรอกวัน-เดือน-ปี Reset ครั้งสุดท้าย'); return; }
 
   const d = new Date(date);
   const photoInput = document.getElementById('rec-photo');
@@ -2300,9 +2302,10 @@ function showMeterDetail(peaNo) {
 
   // ── Mini stats ──
   const latestRec = recs[recs.length - 1];
-  const prevRec = recs[recs.length - 2];
   const latestNet = latestRec ? netUnits(peaNo, latestRec.kwh) : null;
-  const d = (latestRec && prevRec) ? calcDiff(latestRec.kwh, prevRec) : null;
+  // ใช้ getPrevReading เพื่อเทียบกับเดือนก่อนหน้าจริงๆ ไม่ใช่ record ก่อนหน้าในลิสต์
+  const prevForDiff = latestRec ? getPrevReading(latestRec.peaNo, latestRec.year, latestRec.month) : null;
+  const d = (latestRec && prevForDiff) ? calcDiff(latestRec.kwh, prevForDiff) : null;
   document.getElementById('meter-modal-stats').innerHTML = `
     <div class="stat-card primary" style="padding:0.75rem">
       <div class="stat-label">บันทึกทั้งหมด</div>
@@ -2314,7 +2317,7 @@ function showMeterDetail(peaNo) {
       <div class="stat-value" style="font-size:18px">${latestRec ? fmtNum(latestRec.kwh) : '-'}</div>
       <div class="stat-sub">${latestRec ? fmtDate(latestRec.date) : '-'}</div>
     </div>
-    <div class="stat-card ${d && Math.abs(d.pct) >= 10 ? 'danger' : 'success'}" style="padding:0.75rem">
+    <div class="stat-card ${d ? (Math.abs(d.pct) >= 10 ? 'danger' : 'success') : 'primary'}" style="padding:0.75rem">
       <div class="stat-label">เปลี่ยนแปลง</div>
       <div class="stat-value" style="font-size:18px">${d ? (d.pct > 0 ? '+' : '') + d.pct.toFixed(1) + '%' : '-'}</div>
       <div class="stat-sub">เทียบเดือนก่อน</div>
