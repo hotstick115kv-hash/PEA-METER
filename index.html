@@ -913,27 +913,67 @@ tr:hover td { background: var(--gray-50); }
 
 <!-- PHOTO MODAL -->
 <div class="modal-overlay" id="photo-modal" onclick="this.classList.remove('open')">
-  <div class="modal" onclick="event.stopPropagation()" style="border-radius:16px;max-width:500px">
-    <div class="modal-header">
+  <div class="modal" onclick="event.stopPropagation()" style="border-radius:16px;max-width:560px;padding:1.25rem">
+    <div class="modal-header" style="margin-bottom:0.75rem">
       <span class="modal-title">รูปถ่ายมิเตอร์</span>
-      <button class="modal-close" onclick="document.getElementById('photo-modal').classList.remove('open')">✕</button>
+      <button class="modal-close" onclick="document.getElementById('photo-modal').classList.remove('open');photoModalZoomReset()">✕</button>
     </div>
-    <img id="modal-photo-img" style="width:100%;border-radius:10px;object-fit:contain;max-height:500px">
-    <div id="modal-photo-info" style="margin-top:1rem;font-size:13px;color:var(--gray-600)"></div>
+    <!-- loading indicator -->
+    <div id="photo-modal-loading" style="text-align:center;padding:3rem;color:var(--gray-400);font-size:13px">
+      <div class="spinner" style="border-color:var(--gray-200);border-top-color:var(--primary);margin:0 auto 0.75rem"></div>
+      กำลังโหลดรูป...
+    </div>
+    <!-- image container with zoom -->
+    <div id="photo-modal-body" style="display:none">
+      <div id="photo-zoom-container" style="position:relative;overflow:hidden;border-radius:var(--radius);background:#111;touch-action:none;cursor:zoom-in;user-select:none;max-height:60vh;min-height:200px;display:flex;align-items:center;justify-content:center">
+        <img id="modal-photo-img" style="max-width:100%;max-height:60vh;object-fit:contain;display:block;pointer-events:none;transition:none">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <button class="btn btn-outline btn-sm" onclick="photoModalZoomIn()">🔍＋</button>
+        <button class="btn btn-outline btn-sm" onclick="photoModalZoomOut()">🔍－</button>
+        <button class="btn btn-outline btn-sm" onclick="photoModalZoomReset()">↺</button>
+        <a id="photo-modal-link" href="#" target="_blank" class="btn btn-outline btn-sm" style="margin-left:auto">🔗 เปิดต้นฉบับ</a>
+      </div>
+      <div id="modal-photo-info" style="margin-top:0.75rem;font-size:12px;color:var(--gray-600);line-height:1.8;padding:8px 10px;background:var(--gray-50);border-radius:var(--radius)"></div>
+    </div>
+    <!-- error state -->
+    <div id="photo-modal-error" style="display:none;text-align:center;padding:2rem;color:var(--gray-400)">
+      <div style="font-size:32px;margin-bottom:0.5rem">🖼️</div>
+      <div style="font-size:13px">โหลดรูปไม่ได้ — <a id="photo-error-link" href="#" target="_blank" style="color:var(--primary)">เปิดในแท็บใหม่</a></div>
+    </div>
   </div>
 </div>
 
 <!-- METER DETAIL MODAL -->
 <div class="modal-overlay" id="meter-modal" onclick="this.classList.remove('open')">
-  <div class="modal" onclick="event.stopPropagation()" style="border-radius:16px;max-width:680px;max-height:85vh">
+  <div class="modal" onclick="event.stopPropagation()" style="border-radius:16px;max-width:700px;max-height:90vh;overflow-y:auto">
     <div class="modal-header">
-      <span class="modal-title" id="meter-modal-title">ประวัติเครื่องวัด</span>
+      <div>
+        <span class="modal-title" id="meter-modal-title">ประวัติเครื่องวัด</span>
+        <div id="meter-modal-sub" style="font-size:12px;color:var(--gray-600);margin-top:2px"></div>
+      </div>
       <button class="modal-close" onclick="document.getElementById('meter-modal').classList.remove('open')">✕</button>
     </div>
-    <canvas id="chart-meter-detail" height="180" style="margin-bottom:1rem"></canvas>
-    <div class="table-wrap" style="max-height:300px;overflow-y:auto">
-      <table>
-        <thead><tr><th>วันที่</th><th>kWh</th><th>ผลต่าง</th><th>±%</th><th>หน่วยสุทธิ</th><th>ผู้บันทึก</th><th>รูป</th></tr></thead>
+    <!-- mini stat row -->
+    <div id="meter-modal-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem"></div>
+    <!-- chart -->
+    <div style="position:relative;height:200px;margin-bottom:1rem">
+      <canvas id="chart-meter-detail"></canvas>
+    </div>
+    <!-- history table -->
+    <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+      <table style="font-size:13px">
+        <thead>
+          <tr>
+            <th>วันที่</th>
+            <th>kWh</th>
+            <th>ผลต่าง</th>
+            <th>±%</th>
+            <th>หน่วยสุทธิ</th>
+            <th>ผู้บันทึก</th>
+            <th>รูป</th>
+          </tr>
+        </thead>
         <tbody id="meter-history-body"></tbody>
       </table>
     </div>
@@ -1028,7 +1068,7 @@ tr:hover td { background: var(--gray-50); }
 
 const CONFIG = {
   // วาง URL ที่ได้จากการ Deploy Apps Script (ลงท้ายด้วย /exec)
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbx1SUl9_b2xAkCJ6p0RvyuiBnEA48a8SZx7kfkgjgAA43Mg3npOelJub0Xj45DUb1iD/exec',
+  APPS_SCRIPT_URL: 'Yhttps://script.google.com/macros/s/AKfycbx1SUl9_b2xAkCJ6p0RvyuiBnEA48a8SZx7kfkgjgAA43Mg3npOelJub0Xj45DUb1iD/exec',
   ANOMALY_THRESHOLD: 10,
   TOKEN_STORAGE_KEY: 'pea_token',
   USER_STORAGE_KEY: 'pea_user',
@@ -2255,32 +2295,90 @@ function showMeterDetail(peaNo) {
   const m = getMeter(peaNo);
   const recs = readings.filter(r => r.peaNo === peaNo).sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  document.getElementById('meter-modal-title').textContent = `${peaNo} — ${m ? m.location : ''}`;
+  document.getElementById('meter-modal-title').textContent = `${peaNo}`;
+  document.getElementById('meter-modal-sub').textContent = m ? `${m.location} · ${m.kv} kV · ตัวคูณ ${Number(m.maxKwh).toLocaleString()}` : '';
 
+  // ── Mini stats ──
+  const latestRec = recs[recs.length - 1];
+  const prevRec = recs[recs.length - 2];
+  const latestNet = latestRec ? netUnits(peaNo, latestRec.kwh) : null;
+  const d = (latestRec && prevRec) ? calcDiff(latestRec.kwh, prevRec) : null;
+  document.getElementById('meter-modal-stats').innerHTML = `
+    <div class="stat-card primary" style="padding:0.75rem">
+      <div class="stat-label">บันทึกทั้งหมด</div>
+      <div class="stat-value" style="font-size:22px">${recs.length}</div>
+      <div class="stat-sub">ครั้ง</div>
+    </div>
+    <div class="stat-card primary" style="padding:0.75rem">
+      <div class="stat-label">kWh ล่าสุด</div>
+      <div class="stat-value" style="font-size:18px">${latestRec ? fmtNum(latestRec.kwh) : '-'}</div>
+      <div class="stat-sub">${latestRec ? fmtDate(latestRec.date) : '-'}</div>
+    </div>
+    <div class="stat-card ${d && Math.abs(d.pct) >= 10 ? 'danger' : 'success'}" style="padding:0.75rem">
+      <div class="stat-label">เปลี่ยนแปลง</div>
+      <div class="stat-value" style="font-size:18px">${d ? (d.pct > 0 ? '+' : '') + d.pct.toFixed(1) + '%' : '-'}</div>
+      <div class="stat-sub">เทียบเดือนก่อน</div>
+    </div>
+  `;
+
+  // ── History table ──
   const tbody = document.getElementById('meter-history-body');
-  tbody.innerHTML = recs.map(r => {
-    const prev = getPrevReading(r.peaNo, r.year, r.month);
-    const d = calcDiff(r.kwh, prev);
-    return `<tr ${d && Math.abs(d.pct) >= 10 ? 'class="anomaly-row"' : ''}>
-      <td>${fmtDate(r.date)}</td>
-      <td>${fmtNum(r.kwh)}</td>
-      <td>${d ? fmtNum(d.diff) : '-'}</td>
-      <td>${d ? anomalyBadge(d.pct) : '-'}</td>
-      <td>${netUnitsHtml(r.peaNo, r.kwh)}</td>
-      <td style="font-size:12px">${r.name || '-'}</td>
-      <td>${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : '-'}</td>
-    </tr>`;
-  }).join('');
+  if (recs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:2rem">ยังไม่มีประวัติการบันทึก</td></tr>';
+  } else {
+    tbody.innerHTML = [...recs].reverse().map(r => {
+      const prev = getPrevReading(r.peaNo, r.year, r.month);
+      const diff = calcDiff(r.kwh, prev);
+      const isAnom = diff && Math.abs(diff.pct) >= 10;
+      return `<tr style="${isAnom ? 'background:#fff8f8' : ''}">
+        <td style="white-space:nowrap">${fmtDate(r.date)}</td>
+        <td><b>${fmtNum(r.kwh)}</b></td>
+        <td style="font-size:12px">${diff ? fmtNum(diff.diff) : '-'}</td>
+        <td>${diff ? anomalyBadge(diff.pct) : '-'}</td>
+        <td style="font-size:12px">${netUnitsHtml(r.peaNo, r.kwh)}</td>
+        <td style="font-size:12px;color:var(--gray-600)">${r.name || '-'}</td>
+        <td>${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : '<span style="color:var(--gray-300)">—</span>'}</td>
+      </tr>`;
+    }).join('');
+  }
 
+  // ── Chart (หน่วยสุทธิ) ──
   if (chartMeterDetail) chartMeterDetail.destroy();
   const ctx = document.getElementById('chart-meter-detail').getContext('2d');
+  const netData = recs.map(r => { const n = netUnits(r.peaNo, r.kwh); return n ? n.net : r.kwh; });
+  const hasAnomaly = recs.map((r, i) => {
+    if (i === 0) return false;
+    const prev = recs[i - 1];
+    const d = calcDiff(r.kwh, prev);
+    return d && Math.abs(d.pct) >= 10;
+  });
   chartMeterDetail = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: recs.map(r => `${thMonth(r.month)} ${r.year}`),
-      datasets: [{ label: 'kWh', data: recs.map(r => r.kwh), borderColor: '#1a4fa0', backgroundColor: 'rgba(26,79,160,0.1)', fill: true, tension: 0.3, pointRadius: 4 }]
+      labels: recs.map(r => `${thMonth(r.month)} ${String(r.year).slice(2)}`),
+      datasets: [{
+        label: 'หน่วยสุทธิ',
+        data: netData,
+        borderColor: '#1a4fa0',
+        backgroundColor: 'rgba(26,79,160,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 5,
+        pointBackgroundColor: recs.map((_, i) => hasAnomaly[i] ? '#d0021b' : '#1a4fa0'),
+        pointBorderColor: recs.map((_, i) => hasAnomaly[i] ? '#d0021b' : '#1a4fa0'),
+      }]
     },
-    options: { responsive: true, plugins: { legend: { display: false } } }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => 'หน่วยสุทธิ: ' + c.parsed.y.toLocaleString('th-TH') } }
+      },
+      scales: {
+        y: { beginAtZero: false, ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'k' : v } }
+      }
+    }
   });
 
   document.getElementById('meter-modal').classList.add('open');
@@ -2601,17 +2699,26 @@ function printReport() { window.print(); }
 function renderUsers() {
   if (currentUser.role !== 'admin') return;
   const tbody = document.getElementById('users-body');
+  const isMainAdmin = String(currentUser.empId) === '489961';
+
   tbody.innerHTML = allUsers.map(u => {
     const isActive = u.active === true || u.active === 'TRUE' || u.active === 'true';
-    const isMainAdmin = String(u.empId) === '489961';
+    const isTargetMainAdmin = String(u.empId) === '489961';
+    const isSelf = String(u.empId) === String(currentUser.empId);
+
+    // กฎ: admin หลัก (489961) แก้ไขได้ทุกคน แต่ไม่มีปุ่มลบตัวเอง
+    // admin รอง แก้ไขได้แค่ตัวเอง ห้ามแก้ admin หลักหรือ admin คนอื่น
+    const canEditUser = isMainAdmin || isSelf;
+    const canDeleteUser = isMainAdmin && !isTargetMainAdmin;
+
     return `<tr>
       <td><b>${u.empId}</b></td>
-      <td>${u.name}</td>
+      <td>${u.name} ${isSelf ? '<span class="badge badge-primary" style="font-size:10px">ฉัน</span>' : ''}</td>
       <td><span class="badge ${u.role === 'admin' ? 'badge-danger' : 'badge-primary'}">${u.role === 'admin' ? 'ผู้ดูแลระบบ' : 'พนักงานทั่วไป'}</span></td>
       <td><span class="badge ${isActive ? 'badge-success' : 'badge-gray'}">${isActive ? 'ใช้งานได้' : 'ระงับ'}</span></td>
       <td style="display:flex;gap:6px">
-        <button class="btn btn-sm btn-outline" onclick="openEditUser('${u.empId}')">✏️ แก้ไข</button>
-        ${!isMainAdmin ? `<button class="btn btn-sm btn-outline" onclick="deleteUser('${u.empId}')">🗑️ ลบ</button>` : ''}
+        ${canEditUser ? `<button class="btn btn-sm btn-outline" onclick="openEditUser('${u.empId}')">✏️ แก้ไข</button>` : '<span style="font-size:12px;color:var(--gray-400)">—</span>'}
+        ${canDeleteUser ? `<button class="btn btn-sm btn-outline" style="color:var(--danger)" onclick="deleteUser('${u.empId}')">🗑️ ลบ</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -2638,15 +2745,32 @@ function openAddUser() {
 function openEditUser(empId) {
   const u = allUsers.find(x => String(x.empId) === String(empId));
   if (!u) return;
+
+  const isMainAdmin = String(currentUser.empId) === '489961';
+  const isSelf = String(empId) === String(currentUser.empId);
+
+  // ตรวจสิทธิ์: admin รองแก้ได้แค่ตัวเอง
+  if (!isMainAdmin && !isSelf) {
+    alert('คุณไม่มีสิทธิ์แก้ไขข้อมูลผู้ใช้คนอื่น');
+    return;
+  }
+
   document.getElementById('user-edit-mode').value = 'edit';
   document.getElementById('user-original-empid').value = empId;
-  document.getElementById('user-modal-title').textContent = 'แก้ไขผู้ใช้งาน';
+  document.getElementById('user-modal-title').textContent = isSelf ? 'แก้ไขข้อมูลของฉัน' : 'แก้ไขผู้ใช้งาน';
   document.getElementById('user-empid').value = u.empId;
   document.getElementById('user-empid').disabled = true;
   document.getElementById('user-name').value = u.name;
   document.getElementById('user-role').value = u.role;
   document.getElementById('user-pin').value = u.pin || '';
   document.getElementById('user-active').value = String(u.active === true || u.active === 'TRUE' || u.active === 'true');
+
+  // admin รองแก้ชื่อและ PIN ได้ แต่ไม่สามารถเปลี่ยน role หรือสถานะตัวเองได้
+  const roleSelect = document.getElementById('user-role');
+  const activeSelect = document.getElementById('user-active');
+  roleSelect.disabled = !isMainAdmin;
+  activeSelect.disabled = !isMainAdmin;
+
   onUserRoleChange();
   document.getElementById('user-modal').classList.add('open');
 }
@@ -2662,14 +2786,31 @@ async function saveUser() {
   if (!empId || !name) { alert('กรุณากรอกรหัสพนักงานและชื่อ'); return; }
   if (role === 'admin' && !pin) { alert('กรุณาตั้งรหัส PIN สำหรับผู้ดูแลระบบ'); return; }
 
+  const isMainAdmin = String(currentUser.empId) === '489961';
+  const isSelf = String(empId) === String(currentUser.empId);
+
+  // กันซ้ำ: admin รองแก้ได้แค่ตัวเอง
+  if (mode === 'edit' && !isMainAdmin && !isSelf) {
+    alert('คุณไม่มีสิทธิ์แก้ไขข้อมูลผู้ใช้คนอื่น');
+    return;
+  }
+
   try {
     if (mode === 'add') {
+      if (!isMainAdmin) { alert('เฉพาะผู้ดูแลระบบหลักเท่านั้นที่เพิ่มผู้ใช้ได้'); return; }
       await apiPost('addUser', { empId, name, role, pin });
     } else {
-      await apiPost('updateUser', { empId, name, role, pin, active });
+      // ส่ง role/active เฉพาะ admin หลัก ป้องกัน admin รองแก้สิทธิ์
+      const payload = isMainAdmin
+        ? { empId, name, role, pin, active }
+        : { empId, name, pin };
+      await apiPost('updateUser', payload);
     }
     await loadUsers();
     renderUsers();
+    // reset disabled fields
+    document.getElementById('user-role').disabled = false;
+    document.getElementById('user-active').disabled = false;
     document.getElementById('user-modal').classList.remove('open');
     alert('✅ บันทึกข้อมูลผู้ใช้สำเร็จ');
   } catch (err) {
@@ -2689,16 +2830,120 @@ async function deleteUser(empId) {
 }
 
 // ════════════════════════════════════════════
-// PHOTO MODAL
+// PHOTO MODAL — with zoom/pan & loading state
 // ════════════════════════════════════════════
+
+let _pmScale = 1, _pmX = 0, _pmY = 0, _pmDrag = false, _pmLX = 0, _pmLY = 0;
+let _pmPinchDist = 0, _pmImgW = 0, _pmImgH = 0;
 
 function showPhoto(id) {
   const rec = readings.find(r => r.id === id);
   if (!rec || !rec.photoUrl) return;
-  document.getElementById('modal-photo-img').src = rec.photoUrl;
-  document.getElementById('modal-photo-info').innerHTML = `📅 ${fmtDate(rec.date)} | 📍 ${rec.lat}, ${rec.lng} | 👤 ${rec.name}`;
+
+  // reset states
+  document.getElementById('photo-modal-loading').style.display = 'block';
+  document.getElementById('photo-modal-body').style.display = 'none';
+  document.getElementById('photo-modal-error').style.display = 'none';
   document.getElementById('photo-modal').classList.add('open');
+
+  const url = rec.photoUrl;
+  // แปลง Google Drive share URL → direct embed URL ถ้าเป็น Drive link
+  const driveMatch = url.match(/\/d\/([^/]+)\//);
+  const imgUrl = driveMatch
+    ? `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`
+    : url;
+
+  const img = document.getElementById('modal-photo-img');
+  img.onload = () => {
+    _pmImgW = img.naturalWidth;
+    _pmImgH = img.naturalHeight;
+    photoModalZoomReset();
+    document.getElementById('photo-modal-loading').style.display = 'none';
+    document.getElementById('photo-modal-body').style.display = 'block';
+  };
+  img.onerror = () => {
+    document.getElementById('photo-modal-loading').style.display = 'none';
+    document.getElementById('photo-modal-error').style.display = 'block';
+    document.getElementById('photo-error-link').href = url;
+  };
+  img.style.transform = '';
+  img.src = imgUrl;
+
+  document.getElementById('photo-modal-link').href = url;
+  const gpsText = (rec.lat && rec.lng && rec.lat !== '' && rec.lng !== '')
+    ? `📍 ${rec.lat}, ${rec.lng}`
+    : '📍 ไม่มีพิกัด';
+  document.getElementById('modal-photo-info').innerHTML =
+    `📅 ${fmtDate(rec.date)} &nbsp;|&nbsp; ${gpsText} &nbsp;|&nbsp; 👤 ${rec.name || '-'}<br>⚡ PEA: ${rec.peaNo} &nbsp;|&nbsp; 📊 ${fmtNum(rec.kwh)} kWh`;
 }
+
+function photoModalZoomIn()  { _pmScale = Math.min(_pmScale * 1.4, 10); _pmApplyZoom(); }
+function photoModalZoomOut() { _pmScale = Math.max(_pmScale / 1.4, 1);  _pmApplyZoom(); if (_pmScale === 1) { _pmX = 0; _pmY = 0; _pmApplyZoom(); } }
+function photoModalZoomReset() { _pmScale = 1; _pmX = 0; _pmY = 0; _pmApplyZoom(); }
+
+function _pmApplyZoom() {
+  const img = document.getElementById('modal-photo-img');
+  img.style.transform = `translate(${_pmX}px, ${_pmY}px) scale(${_pmScale})`;
+  img.style.transformOrigin = 'center center';
+  const cont = document.getElementById('photo-zoom-container');
+  cont.style.cursor = _pmScale > 1 ? 'grab' : 'zoom-in';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const cont = document.getElementById('photo-zoom-container');
+  if (!cont) return;
+
+  cont.addEventListener('click', e => {
+    if (_pmDrag) return;
+    if (_pmScale === 1) {
+      _pmScale = 2.5; _pmApplyZoom();
+    } else {
+      photoModalZoomReset();
+    }
+  });
+
+  cont.addEventListener('mousedown', e => { if (_pmScale > 1) { _zoomDragging = false; _pmDrag = false; _pmLX = e.clientX; _pmLY = e.clientY; _pmDrag = false; cont.style.cursor = 'grabbing'; } });
+  document.addEventListener('mousemove', e => {
+    if (!_pmDrag && cont.style.cursor === 'grabbing') {
+      const dx = e.clientX - _pmLX, dy = e.clientY - _pmLY;
+      if (Math.abs(dx) + Math.abs(dy) > 3) _pmDrag = true;
+    }
+    if (cont.style.cursor === 'grabbing') {
+      _pmX += e.clientX - _pmLX; _pmY += e.clientY - _pmLY;
+      _pmLX = e.clientX; _pmLY = e.clientY;
+      _pmApplyZoom();
+    }
+  });
+  document.addEventListener('mouseup', () => { if (cont.style.cursor === 'grabbing') cont.style.cursor = _pmScale > 1 ? 'grab' : 'zoom-in'; setTimeout(() => { _pmDrag = false; }, 10); });
+
+  cont.addEventListener('wheel', e => {
+    e.preventDefault();
+    const f = e.deltaY < 0 ? 1.2 : 1/1.2;
+    _pmScale = Math.max(1, Math.min(10, _pmScale * f));
+    if (_pmScale === 1) { _pmX = 0; _pmY = 0; }
+    _pmApplyZoom();
+  }, { passive: false });
+
+  // touch pinch
+  cont.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) { _pmLX = e.touches[0].clientX; _pmLY = e.touches[0].clientY; }
+    else if (e.touches.length === 2) { _pmPinchDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY); }
+  }, { passive: true });
+  cont.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && _pmScale > 1) {
+      _pmX += e.touches[0].clientX - _pmLX; _pmY += e.touches[0].clientY - _pmLY;
+      _pmLX = e.touches[0].clientX; _pmLY = e.touches[0].clientY;
+      _pmApplyZoom();
+    } else if (e.touches.length === 2 && _pmPinchDist > 0) {
+      const d = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+      _pmScale = Math.max(1, Math.min(10, _pmScale * d / _pmPinchDist));
+      if (_pmScale === 1) { _pmX = 0; _pmY = 0; }
+      _pmPinchDist = d; _pmApplyZoom();
+    }
+  }, { passive: false });
+  cont.addEventListener('touchend', () => { _pmPinchDist = 0; });
+});
 
 // Responsive: adjust 2-col grids on small screen
 if (window.innerWidth < 640) {
