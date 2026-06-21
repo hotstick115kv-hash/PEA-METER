@@ -1540,24 +1540,68 @@ function thMonth(m) {
 function getMeter(peaNo) { return meters.find(m => m.peaNo === peaNo); }
 
 /**
- * คำนวณหน่วยสุทธิ = kWh ดิบ × ตัวคูณของมิเตอร์ (maxKwh)
- * คืนค่า { multiplier, net } หรือ null ถ้าไม่พบเครื่องวัด/ตัวคูณ
+ * คำนวณหน่วยสุทธิ
+ *  - ทั่วไป  : (kWh เดือนนี้ − kWh เดือนก่อน) × ตัวคูณ
+ *  - Green2  : ใช้ kWh ที่บันทึกโดยตรง (ผลต่างเดิมของ Green2 ติดลบ ไม่เหมาะคูณ)
+ * คืนค่า { multiplier, diff, net, isGreen2 } หรือ null ถ้าไม่พบเครื่องวัด
  */
-function netUnits(peaNo, kwh) {
+function netUnits(peaNo, kwh, prevKwh) {
   const m = getMeter(peaNo);
-  if (!m || !m.maxKwh) return null;
-  const multiplier = Number(m.maxKwh);
-  return { multiplier, net: Number(kwh) * multiplier };
+  if (!m) return null;
+  const multiplier = Number(m.maxKwh) || 1;
+  const isGreen2 = String(peaNo).toLowerCase() === 'green2';
+
+  if (isGreen2) {
+    // Green2: ใช้ค่า kWh ที่บันทึกโดยตรง ไม่หักเดือนก่อน
+    return { multiplier: 1, diff: null, net: Number(kwh), isGreen2: true };
+  }
+
+  // prevKwh อาจถูกส่งมาตรงๆ หรือ null → หน่วยสุทธิยังคำนวณได้แค่เมื่อมีเดือนก่อน
+  if (prevKwh === undefined || prevKwh === null) {
+    // กรณีไม่รู้เดือนก่อน — ยังคืน multiplier ให้ใช้แสดง แต่ net = null
+    return { multiplier, diff: null, net: null, isGreen2: false };
+  }
+
+  const diff = Number(kwh) - Number(prevKwh);
+  return { multiplier, diff, net: diff * multiplier, isGreen2: false };
 }
 
-/** สร้าง HTML แสดง "kWh × ตัวคูณ = หน่วยสุทธิ" แบบกระชับ ใช้ในตาราง */
-function netUnitsHtml(peaNo, kwh) {
-  const r = netUnits(peaNo, kwh);
-  if (!r) return '<span style="color:var(--gray-400);font-size:11px">-</span>';
-  return `<span style="font-size:11px;color:var(--gray-600)">${fmtNum(kwh)} × ${fmtNum(r.multiplier).replace(/\.00$/,'')} =</span><br><b>${fmtNum(r.net)}</b>`;
+/** สร้าง HTML แสดงหน่วยสุทธิในตาราง
+ *  ต้องการ peaNo, kwh ของเดือนนี้ และ record ของเดือนก่อน (prevRec)
+ */
+function netUnitsHtml(peaNo, kwh, prevRec) {
+  const m = getMeter(peaNo);
+  if (!m) return '<span style="color:var(--gray-400);font-size:11px">-</span>';
+  const multiplier = Number(m.maxKwh) || 1;
+  const isGreen2 = String(peaNo).toLowerCase() === 'green2';
+
+  if (isGreen2) {
+    return `<span style="font-size:11px;color:var(--gray-500)">ใช้ตรง</span><br><b>${fmtNum(kwh)}</b>`;
+  }
+
+  if (!prevRec) {
+    // เดือนแรก — ยังไม่มีเดือนก่อนเปรียบเทียบ
+    return `<span style="font-size:11px;color:var(--gray-400)">× ${fmtNum(multiplier).replace(/\.00$/,'')}<br>ไม่มีเดือนก่อน</span>`;
+  }
+
+  const diff = Number(kwh) - Number(prevRec.kwh);
+  const net = diff * multiplier;
+  return `<span style="font-size:11px;color:var(--gray-600)">(${fmtNum(kwh)} − ${fmtNum(prevRec.kwh)}) × ${fmtNum(multiplier).replace(/\.00$/,'')} =</span><br><b>${fmtNum(net)}</b>`;
 }
 
-function getPrevReading(peaNo, year, month) {
+/**
+ * Helper รวม: คืนค่า net (number) สำหรับนำไปรวมยอด
+ *   - Green2    → kwh โดยตรง
+ *   - ทั่วไป   → (kwh − prev.kwh) × multiplier  (null ถ้าไม่มี prev)
+ */
+function calcNet(peaNo, kwh, prevRec) {
+  const m = getMeter(peaNo);
+  if (!m) return null;
+  if (String(peaNo).toLowerCase() === 'green2') return Number(kwh);
+  if (!prevRec) return null;
+  const diff = Number(kwh) - Number(prevRec.kwh);
+  return diff * (Number(m.maxKwh) || 1);
+}
   let py = year, pm = month - 1;
   if (pm === 0) { pm = 12; py--; }
   return readings.find(r => r.peaNo === peaNo && r.year === py && r.month === pm);
@@ -1594,8 +1638,9 @@ function renderDashboard() {
 
   const totalKwh = filtered.reduce((s, r) => s + r.kwh, 0);
   const totalNetKwh = filtered.reduce((s, r) => {
-    const n = netUnits(r.peaNo, r.kwh);
-    return s + (n ? n.net : 0);
+    const prev = getPrevReading(r.peaNo, r.year, r.month);
+    const n = calcNet(r.peaNo, r.kwh, prev);
+    return s + (n !== null ? n : 0);
   }, 0);
   const anomalies = getAnomalies(year, month, 10);
 
@@ -1633,8 +1678,9 @@ function renderDashboard() {
   const monthlyData = {};
   readings.filter(r => r.year === year).forEach(r => {
     if (!monthlyData[r.month]) monthlyData[r.month] = 0;
-    const n = netUnits(r.peaNo, r.kwh);
-    monthlyData[r.month] += n ? n.net : 0;
+    const prev = getPrevReading(r.peaNo, r.year, r.month);
+    const n = calcNet(r.peaNo, r.kwh, prev);
+    monthlyData[r.month] += n !== null ? n : 0;
   });
   const labels = Array.from({ length: 12 }, (_, i) => thMonth(i + 1));
   const values = Array.from({ length: 12 }, (_, i) => +(monthlyData[i + 1] || 0).toFixed(2));
@@ -1714,12 +1760,21 @@ function checkAnomaly() {
   const msgEl = document.getElementById('rec-anomaly-msg');
   const netEl = document.getElementById('rec-net-units');
 
-  // แสดงหน่วยสุทธิ (kWh × ตัวคูณ) ทุกครั้งที่มีทั้งเครื่องวัดและค่า kWh
+  // แสดงหน่วยสุทธิ: (เดือนนี้ − เดือนก่อน) × ตัวคูณ
   if (peaNo && kwh) {
-    const n = netUnits(peaNo, kwh);
-    netEl.innerHTML = n
-      ? `📐 ${fmtNum(kwh)} × ${fmtNum(n.multiplier).replace(/\.00$/,'')} = <b>${fmtNum(n.net)} หน่วยสุทธิ</b>`
-      : '';
+    const prevR = getPrevReading(peaNo, new Date().getFullYear(), new Date().getMonth() + 1);
+    const isGreen2 = String(peaNo).toLowerCase() === 'green2';
+    const m2 = getMeter(peaNo);
+    const multiplier = m2 ? (Number(m2.maxKwh) || 1) : 1;
+    if (isGreen2) {
+      netEl.innerHTML = `📐 ใช้ตรง = <b>${fmtNum(kwh)} หน่วยสุทธิ</b>`;
+    } else if (prevR) {
+      const diff = kwh - prevR.kwh;
+      const net = diff * multiplier;
+      netEl.innerHTML = `📐 (${fmtNum(kwh)} − ${fmtNum(prevR.kwh)}) × ${fmtNum(multiplier).replace(/\.00$/,'')} = <b>${fmtNum(net)} หน่วยสุทธิ</b>`;
+    } else {
+      netEl.innerHTML = `<span style="color:var(--gray-400);font-size:12px">📐 ตัวคูณ ${fmtNum(multiplier).replace(/\.00$/,'')} — ไม่มีข้อมูลเดือนก่อนสำหรับคำนวณหน่วยสุทธิ</span>`;
+    }
   } else {
     netEl.innerHTML = '';
   }
@@ -2302,7 +2357,7 @@ function showMeterDetail(peaNo) {
 
   // ── Mini stats ──
   const latestRec = recs[recs.length - 1];
-  const latestNet = latestRec ? netUnits(peaNo, latestRec.kwh) : null;
+  const latestNet = latestRec ? calcNet(peaNo, latestRec.kwh, getPrevReading(peaNo, latestRec.year, latestRec.month)) : null;
   // ใช้ getPrevReading เพื่อเทียบกับเดือนก่อนหน้าจริงๆ ไม่ใช่ record ก่อนหน้าในลิสต์
   const prevForDiff = latestRec ? getPrevReading(latestRec.peaNo, latestRec.year, latestRec.month) : null;
   const d = (latestRec && prevForDiff) ? calcDiff(latestRec.kwh, prevForDiff) : null;
@@ -2338,7 +2393,7 @@ function showMeterDetail(peaNo) {
         <td><b>${fmtNum(r.kwh)}</b></td>
         <td style="font-size:12px">${diff ? fmtNum(diff.diff) : '-'}</td>
         <td>${diff ? anomalyBadge(diff.pct) : '-'}</td>
-        <td style="font-size:12px">${netUnitsHtml(r.peaNo, r.kwh)}</td>
+        <td style="font-size:12px">${netUnitsHtml(r.peaNo, r.kwh, prev)}</td>
         <td style="font-size:12px;color:var(--gray-600)">${r.name || '-'}</td>
         <td>${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : '<span style="color:var(--gray-300)">—</span>'}</td>
       </tr>`;
@@ -2348,7 +2403,11 @@ function showMeterDetail(peaNo) {
   // ── Chart (หน่วยสุทธิ) ──
   if (chartMeterDetail) chartMeterDetail.destroy();
   const ctx = document.getElementById('chart-meter-detail').getContext('2d');
-  const netData = recs.map(r => { const n = netUnits(r.peaNo, r.kwh); return n ? n.net : r.kwh; });
+  const netData = recs.map((r, i) => {
+    const prev = i > 0 ? recs[i - 1] : getPrevReading(r.peaNo, r.year, r.month);
+    const n = calcNet(r.peaNo, r.kwh, prev);
+    return n !== null ? n : 0;
+  });
   const hasAnomaly = recs.map((r, i) => {
     if (i === 0) return false;
     const prev = recs[i - 1];
@@ -2430,8 +2489,9 @@ function renderMonthly() {
 
   const total = recs.reduce((s, r) => s + r.kwh, 0);
   const totalNet = recs.reduce((s, r) => {
-    const n = netUnits(r.peaNo, r.kwh);
-    return s + (n ? n.net : 0);
+    const prev = getPrevReading(r.peaNo, r.year, r.month);
+    const n = calcNet(r.peaNo, r.kwh, prev);
+    return s + (n !== null ? n : 0);
   }, 0);
   const anomCount = recs.filter(r => {
     const prev = getPrevReading(r.peaNo, r.year, r.month);
@@ -2459,7 +2519,7 @@ function renderMonthly() {
       <td>${prev ? fmtNum(prev.kwh) : '-'}</td>
       <td>${d ? fmtNum(d.diff) : '-'}</td>
       <td>${d ? anomalyBadge(d.pct) : '-'}</td>
-      <td>${netUnitsHtml(r.peaNo, r.kwh)}</td>
+      <td>${netUnitsHtml(r.peaNo, r.kwh, prev)}</td>
       <td style="font-size:12px">${r.name || '-'}</td>
       <td style="display:flex;gap:6px">
         ${r.photoUrl ? `<button class="btn btn-sm btn-outline" onclick="showPhoto('${r.id}')">🖼️</button>` : ''}
@@ -2486,11 +2546,13 @@ function exportCSV() {
     const m = getMeter(r.peaNo);
     const prev = getPrevReading(r.peaNo, r.year, r.month);
     const d = calcDiff(r.kwh, prev);
-    const n = netUnits(r.peaNo, r.kwh);
+    const m2 = getMeter(r.peaNo);
+    const multiplier = m2 ? (Number(m2.maxKwh) || 1) : 1;
+    const net = calcNet(r.peaNo, r.kwh, prev);
     return [
       fmtDate(r.date), r.peaNo, m ? m.location : '',
       r.kwh, prev ? prev.kwh : '', d ? d.diff.toFixed(2) : '', d ? d.pct.toFixed(2) : '',
-      n ? n.multiplier : '', n ? n.net.toFixed(2) : '',
+      multiplier, net !== null ? net.toFixed(2) : '',
       r.name, r.lat, r.lng,
     ].join(',');
   });
@@ -2571,8 +2633,9 @@ function renderReport() {
   const anomalies = getAnomalies(year, month, 10);
   const totalKwh = recs.reduce((s, r) => s + r.kwh, 0);
   const totalNetKwh = recs.reduce((s, r) => {
-    const n = netUnits(r.peaNo, r.kwh);
-    return s + (n ? n.net : 0);
+    const prev = getPrevReading(r.peaNo, r.year, r.month);
+    const n = calcNet(r.peaNo, r.kwh, prev);
+    return s + (n !== null ? n : 0);
   }, 0);
 
   const byMeter = {};
@@ -2622,7 +2685,7 @@ function renderReport() {
                 const d = kwh !== null && prev ? calcDiff(kwh, prev) : null;
                 const rec = recList[0];
                 const isAnom = d && Math.abs(d.pct) >= 10;
-                const n = kwh !== null ? netUnits(m.peaNo, kwh) : null;
+                const net = kwh !== null ? calcNet(m.peaNo, kwh, prev) : null;
                 return `<tr style="${isAnom ? 'background:#fff8f8' : ''}">
                   <td>${m.id}</td>
                   <td><b>${m.peaNo}</b></td>
@@ -2633,7 +2696,7 @@ function renderReport() {
                   <td>${d ? fmtNum(d.diff) : '-'}</td>
                   <td>${d ? `<span class="${isAnom ? 'diff-high' : 'diff-ok'}">${d.pct > 0 ? '+' : ''}${d.pct.toFixed(1)}%</span>` : '-'}</td>
                   <td>${fmtNum(m.maxKwh).replace(/\.00$/,'')}</td>
-                  <td><b>${n ? fmtNum(n.net) : '-'}</b></td>
+                  <td><b>${net !== null ? fmtNum(net) : '-'}</b></td>
                   <td style="font-size:11px">${rec ? rec.name : '-'}</td>
                   <td style="font-size:11px">${rec ? (rec.note || '') : ''}</td>
                 </tr>`;
