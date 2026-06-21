@@ -1537,7 +1537,9 @@ function thMonth(m) {
   return ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][m] || '';
 }
 
-function getMeter(peaNo) { return meters.find(m => m.peaNo === peaNo); }
+function getMeter(peaNo) { return meters.find(m => String(m.peaNo) === String(peaNo)); }
+
+function matchPeaNo(a, b) { return String(a) === String(b); }
 
 /**
  * คำนวณหน่วยสุทธิ
@@ -1571,22 +1573,18 @@ function netUnits(peaNo, kwh, prevKwh) {
  */
 function netUnitsHtml(peaNo, kwh, prevRec) {
   const m = getMeter(peaNo);
-  if (!m) return '<span style="color:var(--gray-400);font-size:11px">-</span>';
-  const multiplier = Number(m.maxKwh) || 1;
+  if (!m) return '<span style="color:var(--gray-400)">-</span>';
   const isGreen2 = String(peaNo).toLowerCase() === 'green2';
 
   if (isGreen2) {
-    return `<span style="font-size:11px;color:var(--gray-500)">ใช้ตรง</span><br><b>${fmtNum(kwh)}</b>`;
+    return `<b>${fmtNum(kwh)}</b>`;
   }
-
   if (!prevRec) {
-    // เดือนแรก — ยังไม่มีเดือนก่อนเปรียบเทียบ
-    return `<span style="font-size:11px;color:var(--gray-400)">× ${fmtNum(multiplier).replace(/\.00$/,'')}<br>ไม่มีเดือนก่อน</span>`;
+    return `<span style="color:var(--gray-400);font-size:12px">-</span>`;
   }
-
   const diff = Number(kwh) - Number(prevRec.kwh);
-  const net = diff * multiplier;
-  return `<span style="font-size:11px;color:var(--gray-600)">(${fmtNum(kwh)} − ${fmtNum(prevRec.kwh)}) × ${fmtNum(multiplier).replace(/\.00$/,'')} =</span><br><b>${fmtNum(net)}</b>`;
+  const net = diff * (Number(m.maxKwh) || 1);
+  return `<b>${fmtNum(net)}</b>`;
 }
 
 /**
@@ -1602,9 +1600,11 @@ function calcNet(peaNo, kwh, prevRec) {
   const diff = Number(kwh) - Number(prevRec.kwh);
   return diff * (Number(m.maxKwh) || 1);
 }
+
+function getPrevReading(peaNo, year, month) {
   let py = year, pm = month - 1;
   if (pm === 0) { pm = 12; py--; }
-  return readings.find(r => r.peaNo === peaNo && r.year === py && r.month === pm);
+  return readings.find(r => matchPeaNo(r.peaNo, peaNo) && r.year === py && r.month === pm);
 }
 
 function calcDiff(cur, prev) {
@@ -2350,7 +2350,7 @@ async function deleteMeter(peaNo) {
 
 function showMeterDetail(peaNo) {
   const m = getMeter(peaNo);
-  const recs = readings.filter(r => r.peaNo === peaNo).sort((a, b) => new Date(a.date) - new Date(b.date));
+  const recs = readings.filter(r => matchPeaNo(r.peaNo, peaNo)).sort((a, b) => new Date(a.date) - new Date(b.date));
 
   document.getElementById('meter-modal-title').textContent = `${peaNo}`;
   document.getElementById('meter-modal-sub').textContent = m ? `${m.location} · ${m.kv} kV · ตัวคูณ ${Number(m.maxKwh).toLocaleString()}` : '';
